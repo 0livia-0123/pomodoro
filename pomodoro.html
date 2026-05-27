@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>🍅 Pomodoro</title>
+<title>pomodoro focus</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230D1117'/><circle cx='16' cy='17' r='9' fill='none' stroke='%2300BCD4' stroke-width='2.5'/><line x1='16' y1='8' x2='16' y2='4' stroke='%2300BCD4' stroke-width='2' stroke-linecap='round'/><line x1='16' y1='8' x2='20' y2='5' stroke='%2300BCD4' stroke-width='1.5' stroke-linecap='round'/><line x1='16' y1='17' x2='16' y2='11' stroke='%2300BCD4' stroke-width='2' stroke-linecap='round'/><line x1='16' y1='17' x2='20' y2='17' stroke='%2300BCD4' stroke-width='2' stroke-linecap='round'/></svg>"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&family=Syne:wght@300;400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
 <style>
 :root {
@@ -41,8 +41,8 @@ body {
 
 /* Header */
 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
-.logo { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 8px; }
-.logo-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
+.logo { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 300; color: var(--text); display: flex; align-items: center; gap: 10px; letter-spacing: 0.06em; }
+.logo-ring { flex-shrink: 0; filter: drop-shadow(0 0 5px var(--accent)); }
 .nav { display: flex; gap: 4px; }
 .nav-btn { width: 40px; height: 40px; border: 1px solid var(--border2); border-radius: var(--radius); background: transparent; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.15s; }
 .nav-btn:hover, .nav-btn.active { background: var(--surface); color: var(--text); border-color: var(--border2); }
@@ -283,7 +283,19 @@ body {
 </div>
 <div id="app">
   <div class="header">
-    <div class="logo"><div class="logo-dot"></div>pomodoro</div>
+    <div class="logo">
+      <svg class="logo-ring" width="24" height="24" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--surface2)" stroke-width="2"/>
+        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" stroke-width="2"
+          stroke-linecap="round"
+          stroke-dasharray="56.55" stroke-dashoffset="14.14"
+          transform="rotate(-90 12 12)"/>
+        <line x1="12" y1="12" x2="12" y2="6.5" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="12" y1="12" x2="15.5" y2="12" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="1.5" fill="var(--accent)"/>
+      </svg>
+      pomodoro focus
+    </div>
     <div class="nav">
       <button class="nav-btn active" id="nav-timer" onclick="switchView('timer')" title="タイマー"><i class="ti ti-player-play"></i></button>
       <button class="nav-btn" id="nav-tasks" onclick="switchView('tasks')" title="タスク"><i class="ti ti-list-check"></i></button>
@@ -715,10 +727,7 @@ function renderTimerTasks() {
   if(!tasks.length){ el.innerHTML='<div class="empty">タスクがありません</div>'; return; }
 
   const estimates = calcEstimatedTimes();
-  // activeを先頭、未完了、完了済みを末尾
   const order = tasks.map((_,i)=>i).sort((a,b)=>{
-    if(a===activeIdx) return -1;
-    if(b===activeIdx) return 1;
     if(tasks[a].completed !== tasks[b].completed) return tasks[a].completed ? 1 : -1;
     return 0;
   });
@@ -792,9 +801,8 @@ function onDrop(e, dropDisplayIdx) {
   const srcTaskIdx = displayOrder[dragSrcDisplayIdx];
   const movedTask  = tasks.splice(srcTaskIdx, 1)[0];
 
-  // splice後にインデックスがずれるので補正
   let insertTaskIdx = displayOrder[targetDisplayIdx] ?? tasks.length;
-  if(srcTaskIdx < insertTaskIdx) insertTaskIdx--;
+  if(displayOrder[targetDisplayIdx] !== undefined && srcTaskIdx < insertTaskIdx) insertTaskIdx--;
   tasks.splice(insertTaskIdx, 0, movedTask);
 
   // activeIdxを追跡
@@ -848,7 +856,7 @@ function render() {
   fg.style.strokeDasharray  = CIRC;
   fg.style.strokeDashoffset = CIRC * (remaining/totalSec);
   fg.style.stroke = MODE_COLOR[currentMode];
-  document.title = running ? `${m}:${s} — Pomodoro` : '🍅 Pomodoro';
+  document.title = running ? `${m}:${s} — pomodoro focus` : 'pomodoro focus';
 }
 
 function toggleTimer() {
@@ -922,7 +930,7 @@ function onSessionEnd() {
   }
 
   if(cfg.autoBreak) {
-    setTimeout(()=>setMode(next), 700);
+    setTimeout(()=>{ setMode(next); toggleTimer(); }, 700);
   }
 }
 
