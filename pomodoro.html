@@ -1501,36 +1501,56 @@ function _pushMapToNotion() {
 }
 
 // ── マップ Drag & Drop ──
+let _mapDragOverEl = null;
+
 function onMapDragStart(e, id) {
   if (e.target.matches('input, button')) { e.preventDefault(); return; }
   dragSrcMapId = id;
   dragStartX = e.clientX;
   e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => document.querySelector(`.map-node [ondragstart*="${id}"]`)?.closest('.map-node')?.classList.add('map-dragging'), 0);
+  setTimeout(() => document.getElementById('map-node-' + id)?.classList.add('map-dragging'), 0);
 }
 
 function _isPromoteDrag(clientX) { return clientX < dragStartX - 60; }
+
+// 上端20%=before、下端15%=after、それ以外=child（入れ子）
+function _mapDropZone(el, clientY) {
+  const rect = el.getBoundingClientRect();
+  const y = clientY - rect.top;
+  const h = rect.height;
+  if (y < h * 0.2)  return 'map-drop-before';
+  if (y > h * 0.85) return 'map-drop-after';
+  return 'map-drop-child';
+}
 
 function onMapDragOver(e, id) {
   if (!dragSrcMapId) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  clearMapDragStyles();
-  if (_isPromoteDrag(e.clientX)) { _showPromoteHint(true); return; }
+
+  if (_isPromoteDrag(e.clientX)) {
+    if (_mapDragOverEl) { _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child'); _mapDragOverEl = null; }
+    _showPromoteHint(true);
+    return;
+  }
+  _showPromoteHint(false);
   if (dragSrcMapId === id) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const y = e.clientY - rect.top;
-  const h = rect.height;
-  if (y < h * 0.3)      e.currentTarget.classList.add('map-drop-before');
-  else if (y > h * 0.7) e.currentTarget.classList.add('map-drop-after');
-  else                   e.currentTarget.classList.add('map-drop-child');
+
+  const el = e.currentTarget;
+  const zone = _mapDropZone(el, e.clientY);
+  if (_mapDragOverEl !== el) {
+    _mapDragOverEl?.classList.remove('map-drop-before','map-drop-after','map-drop-child');
+    _mapDragOverEl = el;
+  }
+  el.classList.remove('map-drop-before','map-drop-after','map-drop-child');
+  el.classList.add(zone);
 }
 
 function onMapTreeDragOver(e) {
   if (!dragSrcMapId) return;
   e.preventDefault();
-  clearMapDragStyles();
-  if (_isPromoteDrag(e.clientX)) _showPromoteHint(true);
+  if (_mapDragOverEl) { _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child'); _mapDragOverEl = null; }
+  _showPromoteHint(_isPromoteDrag(e.clientX));
 }
 
 function onMapTreeDrop(e) {
@@ -1551,19 +1571,15 @@ function onMapDrop(e, id) {
     dragSrcMapId = null;
     return;
   }
-
   if (dragSrcMapId === id) { dragSrcMapId = null; return; }
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const y = e.clientY - rect.top;
-  const h = rect.height;
-
+  const zone = _mapDropZone(e.currentTarget, e.clientY);
   const srcNode = removeFromMapTree(mapData, dragSrcMapId);
   if (!srcNode) { dragSrcMapId = null; return; }
 
-  if (y < h * 0.3) {
+  if (zone === 'map-drop-before') {
     insertInMapTree(mapData, id, srcNode, 'before');
-  } else if (y > h * 0.7) {
+  } else if (zone === 'map-drop-after') {
     insertInMapTree(mapData, id, srcNode, 'after');
   } else {
     if (!isMapDescendant(srcNode, id)) {
@@ -1579,16 +1595,19 @@ function onMapDrop(e, id) {
 
 function onMapDragEnd(e) {
   dragSrcMapId = null;
-  clearMapDragStyles();
+  document.querySelectorAll('.map-node-row').forEach(el =>
+    el.classList.remove('map-drop-before','map-drop-after','map-drop-child'));
   document.querySelectorAll('.map-node.map-dragging').forEach(el => el.classList.remove('map-dragging'));
+  _showPromoteHint(false);
+  _mapDragOverEl = null;
 }
 
 function clearMapDragStyles() {
-  document.querySelectorAll('.map-node-row').forEach(el =>
-    el.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-child'));
-  document.getElementById('mapTree')?.classList.remove('promote-hint');
-  const hint = document.getElementById('mapPromoteHint');
-  if (hint) hint.style.display = 'none';
+  if (_mapDragOverEl) {
+    _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child');
+    _mapDragOverEl = null;
+  }
+  _showPromoteHint(false);
 }
 
 function _showPromoteHint(show) {
