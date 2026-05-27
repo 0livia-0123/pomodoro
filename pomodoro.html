@@ -308,6 +308,28 @@ body {
 .map-node.map-dragging > .map-node-row { opacity: 0.35; }
 .map-grip { color: var(--text3); font-size: 11px; cursor: grab; flex-shrink: 0; }
 #mapTree.promote-hint { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--radius); }
+
+/* Map depth styling */
+.map-depth-0 > .map-node-row {
+  background: var(--surface); border-color: var(--border2);
+  padding: 9px 12px;
+}
+.map-depth-0 > .map-node-row .map-node-name {
+  font-size: 15px; font-weight: 500; letter-spacing: 0.01em;
+}
+.map-depth-1 > .map-node-row .map-node-name {
+  font-size: 14px; font-weight: 400;
+}
+.map-depth-deep > .map-node-row {
+  padding: 4px 8px; border-color: transparent;
+}
+.map-depth-deep > .map-node-row:hover { border-color: var(--border); }
+.map-depth-deep > .map-node-row .map-node-name {
+  font-size: 12px; font-weight: 300; color: var(--text2);
+}
+.map-depth-deep > .map-node-row .icon-btn { width: 24px; height: 24px; font-size: 11px; }
+.map-depth-deep > .map-node-row .urgency-dot { width: 7px; height: 7px; }
+.map-depth-deep > .map-node-row .map-grip { font-size: 10px; }
 </style>
 </head>
 <body>
@@ -1605,17 +1627,18 @@ function renderMap() {
   const el = document.getElementById('mapTree');
   if (!el) return;
   el.innerHTML = mapData.length
-    ? mapData.map(n => renderMapNode(n)).join('')
+    ? mapData.map(n => renderMapNode(n, 0)).join('')
     : '<div class="empty">ノードがありません。上の入力欄から追加してください。</div>';
 }
 
-function renderMapNode(node) {
+function renderMapNode(node, depth) {
   const hasChildren  = node.children && node.children.length > 0;
   const collapsed    = mapCollapsed[node.id];
   const urg          = node.urgency || 'normal';
   const showChildren = !collapsed && (hasChildren || mapPendingParent === node.id);
+  const depthClass   = depth === 0 ? 'map-depth-0' : depth === 1 ? 'map-depth-1' : 'map-depth-deep';
   return `
-    <div class="map-node urgency-${urg}${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}">
+    <div class="map-node urgency-${urg}${node.id===selectedMapId?' selected':''} ${depthClass}" id="map-node-${node.id}">
       <div class="map-node-row" draggable="true"
         ondragstart="onMapDragStart(event,'${node.id}')"
         ondragover="onMapDragOver(event,'${node.id}')"
@@ -1626,14 +1649,14 @@ function renderMapNode(node) {
           ${hasChildren ? `<i class="ti ti-chevron-${collapsed?'right':'down'}"></i>` : '<span style="width:8px;display:inline-block"></span>'}
         </button>
         <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
-        <span class="map-node-name" style="flex:1;font-size:14px;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${node.name}</span>
+        <span class="map-node-name" style="flex:1;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${node.name}</span>
         <button class="icon-btn" onclick="startAddMapChild('${node.id}')" title="子ノードを追加" style="font-size:13px"><i class="ti ti-plus"></i></button>
         <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent);font-size:13px"><i class="ti ti-clock-play"></i></button>
         <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除" style="font-size:13px"><i class="ti ti-x"></i></button>
       </div>
       ${showChildren ? `
         <div class="map-node-children">
-          ${hasChildren ? node.children.map(c => renderMapNode(c)).join('') : ''}
+          ${hasChildren ? node.children.map(c => renderMapNode(c, depth + 1)).join('') : ''}
           ${mapPendingParent === node.id ? `
             <div class="map-node-row" style="border-color:var(--accent);background:rgba(0,188,212,0.04)">
               <span style="width:28px;flex-shrink:0"></span>
@@ -1651,7 +1674,9 @@ function addMapRoot() {
   const input = document.getElementById('mapNewName');
   const name  = input.value.trim();
   if (!name) return;
-  mapData.push({ id: generateId(), name, urgency: 'normal', children: [] });
+  const newNode = { id: generateId(), name, urgency: 'normal', children: [] };
+  mapData.push(newNode);
+  selectedMapId = newNode.id;
   input.value = '';
   saveMap(); renderMap();
 }
@@ -1670,8 +1695,10 @@ function commitMapAdd() {
   if (name) {
     const parent = findMapNode(mapData, mapPendingParent);
     if (parent) {
+      const newNode = { id: generateId(), name, urgency: 'normal', children: [] };
       parent.children = parent.children || [];
-      parent.children.push({ id: generateId(), name, urgency: 'normal', children: [] });
+      parent.children.push(newNode);
+      selectedMapId = newNode.id;
     }
     saveMap();
   }
