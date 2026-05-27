@@ -69,6 +69,7 @@ body {
 .mode-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .ring-wrap { display: flex; justify-content: center; margin-bottom: 1.5rem; position: relative; }
+.ring-wrap svg { width: 100%; height: auto; max-width: 300px; display: block; }
 #ring-bg { fill: none; stroke: var(--surface2); stroke-width: 5; }
 #ring-fg { fill: none; stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1); }
 .timer-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
@@ -226,10 +227,24 @@ body {
   align-items: start;
 }
 .timer-col-left { display: flex; flex-direction: column; gap: 1rem; }
-.timer-col-right { display: flex; flex-direction: column; }
+.timer-col-right { display: flex; flex-direction: column; gap: 1rem; }
 @media (max-width: 800px) {
   .timer-columns { grid-template-columns: 1fr; }
   #app { max-width: 680px; }
+  body { padding: 1.25rem 1.25rem 3rem; }
+}
+@media (max-width: 480px) {
+  body { padding: 1rem 0.75rem 2.5rem; }
+  .header { margin-bottom: 1.25rem; }
+  .logo { font-size: 18px; }
+  .timer-card { padding: 1.25rem 1.25rem; }
+  .timer-digits { font-size: 52px; }
+  .mode-pill { padding: 6px 12px; font-size: 12px; }
+  .ring-wrap svg { max-width: 220px; }
+  .stats-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat { padding: 12px 10px; }
+  .stat-val { font-size: 22px; }
+  .card { padding: 1.25rem 1rem; }
 }
 
 /* History view */
@@ -268,9 +283,42 @@ body {
 .bar { width: 100%; background: var(--surface2); border-radius: 4px 4px 0 0; transition: height 0.3s ease; min-height: 2px; }
 .bar.today { background: var(--accent); box-shadow: 0 0 8px rgba(0,188,212,0.4); }
 .bar-label { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
+
+/* Map view */
+.map-node { margin-bottom: 3px; }
+.map-node-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg);
+  transition: border-color 0.12s;
+}
+.map-node-row:hover { border-color: var(--border2); }
+.map-node.urgency-high   > .map-node-row { background: rgba(239,83,80,0.07);  border-color: rgba(239,83,80,0.35); }
+.map-node.urgency-medium > .map-node-row { background: rgba(66,165,245,0.07); border-color: rgba(66,165,245,0.35); }
+.map-node-children { margin-left: 12px; padding-left: 12px; border-left: 1.5px solid var(--border); margin-top: 3px; display: flex; flex-direction: column; gap: 3px; }
+.urgency-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; cursor: pointer; transition: transform 0.12s; }
+.urgency-dot:hover { transform: scale(1.4); }
+.map-node.urgency-high   .urgency-dot { background: #EF5350; box-shadow: 0 0 5px rgba(239,83,80,0.6); }
+.map-node.urgency-medium .urgency-dot { background: #42A5F5; box-shadow: 0 0 5px rgba(66,165,245,0.6); }
+.map-node.urgency-normal .urgency-dot { background: var(--border2); }
+.map-node.selected > .map-node-row { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
 </style>
 </head>
 <body>
+<!-- Import preview modal -->
+<div id="importModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.75rem;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 24px 48px rgba(0,0,0,0.2);animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1)">
+    <div class="card-title" style="margin-bottom:0.75rem">読み込んだ予定 — 追加するものにチェック</div>
+    <div class="import-preview" style="background:transparent;padding:0;margin-bottom:0.75rem">
+      <div id="previewItems"></div>
+    </div>
+    <div class="preview-actions">
+      <button class="btn btn-sm" onclick="addCheckedTasks()"><i class="ti ti-plus"></i>タスクに追加</button>
+      <button class="btn btn-sm" onclick="document.getElementById('importModal').style.display='none'">閉じる</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="fileInput" accept=".json" onchange="loadJSON(event)" style="display:none"/>
 <div id="meetingAlert" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;">
   <div class="meeting-alert-card">
     <button class="meeting-alert-close" onclick="dismissAlert()">✕</button>
@@ -298,8 +346,8 @@ body {
     </div>
     <div class="nav">
       <button class="nav-btn active" id="nav-timer" onclick="switchView('timer')" title="タイマー"><i class="ti ti-player-play"></i></button>
-      <button class="nav-btn" id="nav-tasks" onclick="switchView('tasks')" title="タスク"><i class="ti ti-list-check"></i></button>
       <button class="nav-btn" id="nav-history" onclick="switchView('history')" title="履歴・統計"><i class="ti ti-chart-bar"></i></button>
+      <button class="nav-btn" id="nav-map" onclick="switchView('map')" title="タスクマップ"><i class="ti ti-sitemap"></i></button>
       <button class="nav-btn" id="nav-settings" onclick="switchView('settings')" title="設定"><i class="ti ti-settings"></i></button>
     </div>
   </div>
@@ -344,60 +392,28 @@ body {
       </div>
       <!-- 右: タスク一覧 -->
       <div class="timer-col-right">
-        <div class="card" style="height:100%">
+        <div class="card" style="flex:1">
           <div class="card-title" style="margin-bottom:0.75rem">今日のタスク</div>
           <div class="add-row" style="margin-bottom:0.5rem">
             <input type="text" id="timerNewName" placeholder="タスクを追加…" onkeydown="if(event.key==='Enter')addTaskFromTimer()"/>
             <input type="number" id="timerNewPom" value="1" min="1" max="20" title="ポモドーロ数"/>
             <button class="btn btn-sm" onclick="addTaskFromTimer()"><i class="ti ti-plus"></i></button>
           </div>
-          <div style="margin-bottom:0.75rem">
-            <button class="btn btn-sm" style="width:100%;justify-content:center;color:var(--accent);border-color:var(--accent)" onclick="fetchFromGas()">
-              <i class="ti ti-calendar-bolt"></i>カレンダーから今日の予定を読み込む
+          <div style="display:flex;gap:6px;margin-bottom:0.75rem">
+            <button class="btn btn-sm" style="flex:1;justify-content:center;color:var(--accent);border-color:var(--accent)" onclick="fetchFromGas()">
+              <i class="ti ti-calendar-bolt"></i>カレンダーから読み込む
+            </button>
+            <button class="btn btn-sm" onclick="document.getElementById('fileInput').click()" title="JSONファイルから読み込む">
+              <i class="ti ti-file-import"></i>
             </button>
           </div>
           <div class="task-list" id="timerTaskList"><div class="empty">タスクがありません</div></div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TASKS -->
-  <div id="view-tasks" class="view">
-    <div class="card">
-      <div class="card-title">カレンダーから読み込む</div>
-      <div style="display:flex;gap:8px;margin-bottom:0.75rem">
-        <button class="btn" style="flex:1;justify-content:center" onclick="fetchFromGas()">
-          <i class="ti ti-calendar-bolt"></i>カレンダーから読み込む
-        </button>
-        <button class="btn" onclick="document.getElementById('fileInput').click()" title="JSONファイルから読み込む">
-          <i class="ti ti-file-import"></i>
-        </button>
-      </div>
-      <input type="file" id="fileInput" accept=".json" onchange="loadJSON(event)"/>
-      <div id="importPreview" style="display:none">
-        <div class="import-preview">
-          <div class="preview-header">読み込んだ予定 — 追加するものにチェック</div>
-          <div id="previewItems"></div>
-          <div class="preview-actions">
-            <button class="btn btn-sm" onclick="addCheckedTasks()"><i class="ti ti-plus"></i>タスクに追加</button>
-            <button class="btn btn-sm" onclick="document.getElementById('importPreview').style.display='none'">閉じる</button>
-          </div>
+        <div class="card" id="timerDeferredCard" style="display:none">
+          <div class="card-title" style="margin-bottom:0.75rem">今後のタスク</div>
+          <div id="timerDeferredList"></div>
         </div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">タスクリスト</div>
-      <div class="task-list" id="taskList"><div class="empty">タスクがありません</div></div>
-      <div class="add-row">
-        <input type="text" id="newName" placeholder="タスクを追加…" onkeydown="if(event.key==='Enter')addTask()"/>
-        <input type="number" id="newPom" value="1" min="1" max="20" title="ポモドーロ数"/>
-        <button class="btn btn-sm" onclick="addTask()"><i class="ti ti-plus"></i></button>
-      </div>
-    </div>
-    <div class="card" id="deferredCard" style="display:none">
-      <div class="card-title" style="margin-bottom:0.75rem">📅 明日以降のタスク</div>
-      <div id="deferredList"></div>
     </div>
   </div>
 
@@ -415,6 +431,21 @@ body {
     <div class="card">
       <div class="card-title">セッション履歴</div>
       <div id="historyList"><div class="empty">まだセッションがありません</div></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="view-map" class="view">
+    <div class="card">
+      <div class="card-title">タスクマップ</div>
+      <div class="add-row" style="margin-bottom:0.5rem">
+        <input type="text" id="mapNewName" placeholder="ルートノードを追加…" onkeydown="if(event.key==='Enter')addMapRoot()"/>
+        <button class="btn btn-sm" onclick="addMapRoot()"><i class="ti ti-plus"></i>追加</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:0.75rem">
+        ● をクリックで緊急度切替（赤=高・青=中・グレー=通常）／ノード名をダブルクリックで編集
+      </div>
+      <div id="mapTree" style="display:flex;flex-direction:column;gap:3px"></div>
     </div>
   </div>
 
@@ -499,6 +530,7 @@ const DAYS = ['日','月','火','水','木','金','土'];
 const MODE_COLOR = { work:'#00BCD4', short:'#26C6DA', long:'#80DEEA' };
 
 let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
+let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null;
 
 function load() {
   cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'' };
@@ -543,6 +575,7 @@ function load() {
   // 今日の起動日を記録
   localStorage.setItem('pom_last_open', today);
 
+  loadMapData();
   setMode('work', true);
   renderTasks();
   renderTimerTasks();
@@ -606,7 +639,7 @@ function showImportPreview(data) {
       <span class="preview-pom">🍅×${pom}</span>
     </div>`;
   }).join('');
-  document.getElementById('importPreview').style.display = 'block';
+  document.getElementById('importModal').style.display = 'flex';
 }
 
 function fetchFromGas() {
@@ -628,7 +661,6 @@ function fetchFromGas() {
     document.body.removeChild(script);
     if(!data.tasks || !data.tasks.length) { showToast('今日の予定が見つかりませんでした'); return; }
     showImportPreview(data);
-    switchView('tasks');
   };
 
   script.onerror = function() {
@@ -983,16 +1015,19 @@ function removeTask(i) {
   save(); renderTasks();
 }
 function addTask(name, total, sub) {
-  const n = name||document.getElementById('newName').value.trim();
+  const nameEl = document.getElementById('newName');
+  const pomEl  = document.getElementById('newPom');
+  const n = name || (nameEl ? nameEl.value.trim() : '');
   if(!n) return;
-  const t = total||parseInt(document.getElementById('newPom').value)||1;
+  const t = total || (pomEl ? parseInt(pomEl.value) : 0) || 1;
   tasks.push({name:n, total:t, done:0, completed:false, sub:sub||''});
-  document.getElementById('newName').value='';
-  document.getElementById('newPom').value='1';
+  if(nameEl) nameEl.value='';
+  if(pomEl)  pomEl.value='1';
   save(); renderTasks(); scheduleMeetingAlerts();
 }
 function renderTasks() {
   const el = document.getElementById('taskList');
+  if(!el) return;
   if(!tasks.length){ el.innerHTML='<div class="empty">タスクがありません</div>'; return; }
   el.innerHTML = tasks.map((t,i)=>`
     <div class="task-item ${i===activeIdx?'is-active':''} ${t.completed?'is-done':''}" onclick="selectTask(${i})">
@@ -1109,9 +1144,9 @@ function startEditTask(i, el) {
 }
 
 function renderDeferred() {
-  const card = document.getElementById('deferredCard');
-  const list = document.getElementById('deferredList');
-  if(!list) return;
+  const card = document.getElementById('timerDeferredCard');
+  const list = document.getElementById('timerDeferredList');
+  if(!card || !list) return;
   if(!deferred.length) { card.style.display='none'; return; }
   card.style.display = 'block';
   list.innerHTML = deferred.map((t,i) => `
@@ -1221,7 +1256,7 @@ function addCheckedTasks() {
       addTask(t.title, pom, `${t.startTime}〜${t.endTime}`);
     }
   });
-  document.getElementById('importPreview').style.display='none';
+  document.getElementById('importModal').style.display='none';
   scheduleMeetingAlerts();
 }
 
@@ -1290,11 +1325,13 @@ function clearAllData() {
 function switchView(v) {
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
-  document.getElementById('view-'+v).classList.add('active');
-  document.getElementById('nav-'+v).classList.add('active');
+  const viewEl = document.getElementById('view-'+v);
+  const navEl  = document.getElementById('nav-'+v);
+  if(viewEl) viewEl.classList.add('active');
+  if(navEl)  navEl.classList.add('active');
   if(v==='history') renderHistory();
-  if(v==='tasks') renderDeferred();
   if(v==='timer') updateTimerStats();
+  if(v==='map') renderMap();
 }
 
 function beep() {
@@ -1357,6 +1394,173 @@ function dismissAlert() {
   const card = el.querySelector('.meeting-alert-card');
   card.style.animation = 'popOut 0.2s ease forwards';
   setTimeout(() => { el.style.display='none'; card.style.animation=''; }, 200);
+}
+
+// ── タスクマップ ──
+function generateId() {
+  return 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+}
+
+function loadMapData() {
+  mapData      = JSON.parse(localStorage.getItem('pom_map')     || '[]');
+  mapCollapsed = JSON.parse(localStorage.getItem('pom_map_col') || '{}');
+}
+
+function saveMap() {
+  localStorage.setItem('pom_map',     JSON.stringify(mapData));
+  localStorage.setItem('pom_map_col', JSON.stringify(mapCollapsed));
+}
+
+function findMapNode(nodes, id) {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const f = n.children ? findMapNode(n.children, id) : null;
+    if (f) return f;
+  }
+  return null;
+}
+
+function renderMap() {
+  const el = document.getElementById('mapTree');
+  if (!el) return;
+  el.innerHTML = mapData.length
+    ? mapData.map(n => renderMapNode(n)).join('')
+    : '<div class="empty">ノードがありません。上の入力欄から追加してください。</div>';
+}
+
+function renderMapNode(node) {
+  const hasChildren  = node.children && node.children.length > 0;
+  const collapsed    = mapCollapsed[node.id];
+  const urg          = node.urgency || 'normal';
+  const showChildren = !collapsed && (hasChildren || mapPendingParent === node.id);
+  return `
+    <div class="map-node urgency-${urg}${node.id===selectedMapId?' selected':''}">
+      <div class="map-node-row">
+        <button class="icon-btn" onclick="toggleMapCollapse('${node.id}')" style="width:20px;height:20px;font-size:11px;flex-shrink:0">
+          ${hasChildren ? `<i class="ti ti-chevron-${collapsed?'right':'down'}"></i>` : '<span style="width:8px;display:inline-block"></span>'}
+        </button>
+        <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
+        <span class="map-node-name" style="flex:1;font-size:14px;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${node.name}</span>
+        <button class="icon-btn" onclick="startAddMapChild('${node.id}')" title="子ノードを追加" style="font-size:13px"><i class="ti ti-plus"></i></button>
+        <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent);font-size:13px"><i class="ti ti-clock-play"></i></button>
+        <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除" style="font-size:13px"><i class="ti ti-x"></i></button>
+      </div>
+      ${showChildren ? `
+        <div class="map-node-children">
+          ${hasChildren ? node.children.map(c => renderMapNode(c)).join('') : ''}
+          ${mapPendingParent === node.id ? `
+            <div class="map-node-row" style="border-color:var(--accent);background:rgba(0,188,212,0.04)">
+              <span style="width:28px;flex-shrink:0"></span>
+              <input id="mapInlineInput" type="text" placeholder="ノード名を入力…"
+                style="flex:1;border:none;background:transparent;color:var(--text);font-size:14px;outline:none;font-family:'DM Sans',sans-serif"
+                onkeydown="if(event.key==='Enter')commitMapAdd();if(event.key==='Escape')cancelMapAdd()"/>
+              <button class="icon-btn" onclick="commitMapAdd()" style="color:var(--accent)"><i class="ti ti-check"></i></button>
+              <button class="icon-btn" onclick="cancelMapAdd()"><i class="ti ti-x"></i></button>
+            </div>` : ''}
+        </div>` : ''}
+    </div>`;
+}
+
+function addMapRoot() {
+  const input = document.getElementById('mapNewName');
+  const name  = input.value.trim();
+  if (!name) return;
+  mapData.push({ id: generateId(), name, urgency: 'normal', children: [] });
+  input.value = '';
+  saveMap(); renderMap();
+}
+
+function startAddMapChild(parentId) {
+  mapPendingParent = parentId;
+  mapCollapsed[parentId] = false;
+  renderMap();
+  setTimeout(() => document.getElementById('mapInlineInput')?.focus(), 30);
+}
+
+function commitMapAdd() {
+  const input = document.getElementById('mapInlineInput');
+  if (!input) return;
+  const name = input.value.trim();
+  if (name) {
+    const parent = findMapNode(mapData, mapPendingParent);
+    if (parent) {
+      parent.children = parent.children || [];
+      parent.children.push({ id: generateId(), name, urgency: 'normal', children: [] });
+    }
+    saveMap();
+  }
+  mapPendingParent = null;
+  renderMap();
+}
+
+function cancelMapAdd() {
+  mapPendingParent = null;
+  renderMap();
+}
+
+function toggleMapCollapse(id) {
+  mapCollapsed[id] = !mapCollapsed[id];
+  saveMap(); renderMap();
+}
+
+function cycleMapUrgency(id) {
+  const node  = findMapNode(mapData, id);
+  if (!node) return;
+  const order = ['normal', 'high', 'medium'];
+  node.urgency = order[(order.indexOf(node.urgency || 'normal') + 1) % order.length];
+  saveMap(); renderMap();
+}
+
+function editMapName(id, el) {
+  const node = findMapNode(mapData, id);
+  if (!node) return;
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = node.name;
+  input.className = 'task-name-input'; input.style.fontSize = '14px';
+  el.replaceWith(input);
+  input.focus(); input.select();
+  const commit = () => { const v = input.value.trim(); if (v) { node.name = v; saveMap(); } renderMap(); };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.value = node.name; input.blur(); }
+  });
+}
+
+function deleteMapNode(id) {
+  const ri = mapData.findIndex(n => n.id === id);
+  if (ri >= 0) { mapData.splice(ri, 1); saveMap(); renderMap(); return; }
+  function rem(nodes) {
+    for (const n of nodes) {
+      const i = n.children ? n.children.findIndex(c => c.id === id) : -1;
+      if (i >= 0) { n.children.splice(i, 1); return true; }
+      if (n.children && rem(n.children)) return true;
+    }
+  }
+  rem(mapData); saveMap(); renderMap();
+}
+
+function selectMapNode(id) {
+  selectedMapId = selectedMapId === id ? null : id;
+  renderMap();
+}
+
+document.addEventListener('keydown', e => {
+  if (!selectedMapId) return;
+  if (e.key === 'Enter' && !e.target.matches('input, textarea')) {
+    e.preventDefault();
+    startAddMapChild(selectedMapId);
+  }
+  if (e.key === 'Escape') { selectedMapId = null; renderMap(); }
+});
+
+function addToTodayFromMap(id) {
+  const node = findMapNode(mapData, id);
+  if (!node) return;
+  tasks.push({ name: node.name, total: 1, done: 0, completed: false, sub: '' });
+  if (activeIdx < 0) activeIdx = tasks.length - 1;
+  save(); renderTasks(); renderTimerTasks();
+  showToast('「' + node.name + '」をタスクに追加しました');
 }
 
 load();
