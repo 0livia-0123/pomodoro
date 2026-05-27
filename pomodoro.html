@@ -325,11 +325,26 @@ body {
 }
 .map-depth-deep > .map-node-row:hover { border-color: var(--border); }
 .map-depth-deep > .map-node-row .map-node-name {
-  font-size: 12px; font-weight: 300; color: var(--text2);
+  font-size: 13px; font-weight: 300; color: var(--text2);
 }
 .map-depth-deep > .map-node-row .icon-btn { width: 24px; height: 24px; font-size: 11px; }
 .map-depth-deep > .map-node-row .urgency-dot { width: 7px; height: 7px; }
 .map-depth-deep > .map-node-row .map-grip { font-size: 10px; }
+
+/* 緊急度ノードのテキストに色を付けて視認性アップ */
+.map-node.urgency-high > .map-node-row .map-node-name {
+  color: #C62828; font-weight: 500;
+}
+.map-node.urgency-medium > .map-node-row .map-node-name {
+  color: #1565C0; font-weight: 500;
+}
+/* depth-deep の場合はさらに明示的に上書き */
+.map-depth-deep.urgency-high > .map-node-row .map-node-name {
+  color: #C62828; font-weight: 400;
+}
+.map-depth-deep.urgency-medium > .map-node-row .map-node-name {
+  color: #1565C0; font-weight: 400;
+}
 </style>
 </head>
 <body>
@@ -831,9 +846,9 @@ function renderTimerTasks() {
 }
 
 // ── Drag & Drop ──
-// displayOrder[i] = tasks配列上のインデックス（ソート済み順）
-let dragSrcDisplayIdx = null; // displayOrder上の位置
-let displayOrder = [];        // renderTimerTasks で更新
+let dragSrcDisplayIdx = null;
+let displayOrder = [];
+let _dragOverEl = null;
 
 function onDragStart(e, displayIdx) {
   dragSrcDisplayIdx = displayIdx;
@@ -844,43 +859,40 @@ function onDragStart(e, displayIdx) {
 function onDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  clearDragStyles();
   const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
-  const mid  = rect.top + rect.height / 2;
-  if(e.clientY < mid) el.classList.add('drag-over-top');
-  else                el.classList.add('drag-over-bottom');
+  const isTop = e.clientY < el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
+
+  if (_dragOverEl && _dragOverEl !== el) {
+    _dragOverEl.classList.remove('drag-over-top', 'drag-over-bottom');
+  }
+  _dragOverEl = el;
+  el.classList.toggle('drag-over-top',    isTop);
+  el.classList.toggle('drag-over-bottom', !isTop);
 }
 
 function onDrop(e, dropDisplayIdx) {
   e.preventDefault();
-  if(dragSrcDisplayIdx === null) return;
+  if (dragSrcDisplayIdx === null) return;
   clearDragStyles();
 
-  const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
+  const rect = e.currentTarget.getBoundingClientRect();
   const insertAfter = e.clientY >= rect.top + rect.height / 2;
 
-  let targetDisplayIdx = insertAfter ? dropDisplayIdx + 1 : dropDisplayIdx;
-  if(targetDisplayIdx === dragSrcDisplayIdx || targetDisplayIdx === dragSrcDisplayIdx + 1) {
-    dragSrcDisplayIdx = null; return;
-  }
+  // ドロップ先の挿入位置を決める（ソース削除後の位置に補正）
+  let insertAt = insertAfter ? dropDisplayIdx + 1 : dropDisplayIdx;
+  if (insertAt > dragSrcDisplayIdx) insertAt--;
+  if (insertAt === dragSrcDisplayIdx) { dragSrcDisplayIdx = null; return; }
 
-  // displayOrderを使ってtasks配列上の実インデックスを操作
-  const srcTaskIdx = displayOrder[dragSrcDisplayIdx];
-  const movedTask  = tasks.splice(srcTaskIdx, 1)[0];
+  // displayOrder を並び替えて tasks を再構築
+  const newOrder = [...displayOrder];
+  const [moved] = newOrder.splice(dragSrcDisplayIdx, 1);
+  newOrder.splice(insertAt, 0, moved);
 
-  let insertTaskIdx = displayOrder[targetDisplayIdx] ?? tasks.length;
-  if(displayOrder[targetDisplayIdx] !== undefined && srcTaskIdx < insertTaskIdx) insertTaskIdx--;
-  tasks.splice(insertTaskIdx, 0, movedTask);
-
-  // activeIdxを追跡
-  if(activeIdx === srcTaskIdx) {
-    activeIdx = insertTaskIdx;
-  } else {
-    if(srcTaskIdx < activeIdx) activeIdx--;
-    if(insertTaskIdx <= activeIdx) activeIdx++;
-  }
+  const activeTask = activeIdx >= 0 ? tasks[activeIdx] : null;
+  const newTasks = newOrder.map(i => tasks[i]);
+  tasks.length = 0;
+  newTasks.forEach(t => tasks.push(t));
+  activeIdx = activeTask ? tasks.indexOf(activeTask) : -1;
 
   dragSrcDisplayIdx = null;
   save();
@@ -896,9 +908,10 @@ function onDragEnd(e) {
 }
 
 function clearDragStyles() {
-  document.querySelectorAll('#timerTaskList .task-item').forEach(el => {
-    el.classList.remove('drag-over-top', 'drag-over-bottom');
-  });
+  if (_dragOverEl) {
+    _dragOverEl.classList.remove('drag-over-top', 'drag-over-bottom');
+    _dragOverEl = null;
+  }
 }
 
 function todayKey() { return new Date().toISOString().slice(0,10); }
