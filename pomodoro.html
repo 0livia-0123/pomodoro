@@ -302,6 +302,11 @@ body {
 .map-node.urgency-medium .urgency-dot { background: #42A5F5; box-shadow: 0 0 5px rgba(66,165,245,0.6); }
 .map-node.urgency-normal .urgency-dot { background: var(--border2); }
 .map-node.selected > .map-node-row { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
+.map-node-row.map-drop-before { border-top: 2.5px solid var(--accent) !important; }
+.map-node-row.map-drop-after  { border-bottom: 2.5px solid var(--accent) !important; }
+.map-node-row.map-drop-child  { background: rgba(0,188,212,0.1) !important; border-color: var(--accent) !important; }
+.map-node.map-dragging > .map-node-row { opacity: 0.35; }
+.map-grip { color: var(--text3); font-size: 11px; cursor: grab; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -514,6 +519,8 @@ body {
       <input type="password" id="cfgNotionToken" placeholder="ntn_xxxxxxxxxxxx" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
       <div class="setting-row"><span class="setting-label">データベースID</span></div>
       <input type="text" id="cfgNotionDb" placeholder="d6e9bcbfdf45443187709ebbd727b374" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
+      <div class="setting-row"><span class="setting-label">タスクマップ用ページID</span></div>
+      <input type="text" id="cfgMapPageId" placeholder="Notionページ URL末尾の32桁" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-sm" onclick="saveNotionSettings()"><i class="ti ti-check"></i>保存</button>
         <button class="btn btn-sm" onclick="testNotion()"><i class="ti ti-plug"></i>接続テスト</button>
@@ -530,7 +537,7 @@ const DAYS = ['日','月','火','水','木','金','土'];
 const MODE_COLOR = { work:'#00BCD4', short:'#26C6DA', long:'#80DEEA' };
 
 let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
-let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null;
+let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null, dragSrcMapId=null;
 
 function load() {
   cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'' };
@@ -548,10 +555,12 @@ function load() {
   document.getElementById('cfgLunchEnabled').checked = cfg.lunchEnabled !== false;
   document.getElementById('cfgLunchStart').value = cfg.lunchStart || '12:00';
   document.getElementById('cfgLunchEnd').value   = cfg.lunchEnd   || '13:00';
-  const nt = localStorage.getItem('pom_notion_token') || '';
-  const nd = localStorage.getItem('pom_notion_db')    || 'd6e9bcbfdf45443187709ebbd727b374';
-  document.getElementById('cfgNotionToken').value = nt;
-  document.getElementById('cfgNotionDb').value    = nd;
+  const nt = localStorage.getItem('pom_notion_token')   || '';
+  const nd = localStorage.getItem('pom_notion_db')      || 'd6e9bcbfdf45443187709ebbd727b374';
+  const nm = localStorage.getItem('pom_map_page_id')    || '';
+  document.getElementById('cfgNotionToken').value  = nt;
+  document.getElementById('cfgNotionDb').value     = nd;
+  document.getElementById('cfgMapPageId').value    = nm;
   if(tasks.length && activeIdx<0) activeIdx=0;
 
   // 日付をまたいでいたら完了タスクをクリア＆持ち越しタスクを復活
@@ -675,8 +684,10 @@ function fetchFromGas() {
 function saveNotionSettings() {
   const t = document.getElementById('cfgNotionToken').value.trim();
   const d = document.getElementById('cfgNotionDb').value.trim().replace(/-/g,'');
+  const m = document.getElementById('cfgMapPageId').value.trim().replace(/-/g,'');
   localStorage.setItem('pom_notion_token', t);
   localStorage.setItem('pom_notion_db',    d);
+  localStorage.setItem('pom_map_page_id',  m);
   const s = document.getElementById('notionStatus');
   s.style.color='var(--short)'; s.textContent='✓ 保存しました';
   setTimeout(()=>{ s.textContent=''; s.style.color='var(--text3)'; }, 2000);
@@ -1404,11 +1415,138 @@ function generateId() {
 function loadMapData() {
   mapData      = JSON.parse(localStorage.getItem('pom_map')     || '[]');
   mapCollapsed = JSON.parse(localStorage.getItem('pom_map_col') || '{}');
+  // Notionから非同期で読み込み（新しいデータがあればlocalStorageを上書き）
+  const token     = localStorage.getItem('pom_notion_token') || '';
+  const mapPageId = localStorage.getItem('pom_map_page_id')  || '';
+  if (!token || !mapPageId || !cfg.gasUrl) return;
+  const cb = 'loadMapCb_' + Date.now();
+  const params = new URLSearchParams({ action: 'loadMap', callback: cb, token, mapPageId });
+  const script = document.createElement('script');
+  script.src = cfg.gasUrl + '?' + params.toString();
+  window[cb] = function(data) {
+    delete window[cb]; document.body.removeChild(script);
+    if (!data.ok || !data.mapData) return;
+    try {
+      mapData = JSON.parse(data.mapData);
+      localStorage.setItem('pom_map', data.mapData);
+      renderMap();
+    } catch(e) {}
+  };
+  script.onerror = () => { delete window[cb]; document.body.removeChild(script); };
+  document.body.appendChild(script);
 }
 
+let _mapSaveTimer = null;
 function saveMap() {
   localStorage.setItem('pom_map',     JSON.stringify(mapData));
   localStorage.setItem('pom_map_col', JSON.stringify(mapCollapsed));
+  // 2秒後にNotionへまとめて保存（連続操作でも1回だけ送る）
+  clearTimeout(_mapSaveTimer);
+  _mapSaveTimer = setTimeout(_pushMapToNotion, 2000);
+}
+
+function _pushMapToNotion() {
+  const token     = localStorage.getItem('pom_notion_token') || '';
+  const mapPageId = localStorage.getItem('pom_map_page_id')  || '';
+  if (!token || !mapPageId || !cfg.gasUrl) return;
+  const cb = 'saveMapCb_' + Date.now();
+  const params = new URLSearchParams({ action: 'saveMap', callback: cb, token, mapPageId, mapData: JSON.stringify(mapData) });
+  const script = document.createElement('script');
+  script.src = cfg.gasUrl + '?' + params.toString();
+  window[cb] = function(data) {
+    delete window[cb]; document.body.removeChild(script);
+    if (!data.ok) console.warn('マップ保存失敗:', data.error);
+  };
+  script.onerror = () => { delete window[cb]; document.body.removeChild(script); };
+  document.body.appendChild(script);
+}
+
+// ── マップ Drag & Drop ──
+function onMapDragStart(e, id) {
+  if (e.target.matches('input, button')) { e.preventDefault(); return; }
+  dragSrcMapId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => document.querySelector(`.map-node [ondragstart*="${id}"]`)?.closest('.map-node')?.classList.add('map-dragging'), 0);
+}
+
+function onMapDragOver(e, id) {
+  if (!dragSrcMapId || dragSrcMapId === id) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  clearMapDragStyles();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  const h = rect.height;
+  if (y < h * 0.3)      e.currentTarget.classList.add('map-drop-before');
+  else if (y > h * 0.7) e.currentTarget.classList.add('map-drop-after');
+  else                   e.currentTarget.classList.add('map-drop-child');
+}
+
+function onMapDrop(e, id) {
+  e.preventDefault();
+  if (!dragSrcMapId || dragSrcMapId === id) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  const h = rect.height;
+  clearMapDragStyles();
+
+  const srcNode = removeFromMapTree(mapData, dragSrcMapId);
+  if (!srcNode) { dragSrcMapId = null; return; }
+
+  if (y < h * 0.3) {
+    insertInMapTree(mapData, id, srcNode, 'before');
+  } else if (y > h * 0.7) {
+    insertInMapTree(mapData, id, srcNode, 'after');
+  } else {
+    if (!isMapDescendant(srcNode, id)) {
+      const target = findMapNode(mapData, id);
+      if (target) { target.children = target.children || []; target.children.push(srcNode); }
+    } else {
+      mapData.push(srcNode); // 循環防止：失敗したらルートに戻す
+    }
+  }
+  dragSrcMapId = null;
+  saveMap(); renderMap();
+}
+
+function onMapDragEnd(e) {
+  dragSrcMapId = null;
+  clearMapDragStyles();
+  document.querySelectorAll('.map-node.map-dragging').forEach(el => el.classList.remove('map-dragging'));
+}
+
+function clearMapDragStyles() {
+  document.querySelectorAll('.map-node-row').forEach(el =>
+    el.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-child'));
+}
+
+function removeFromMapTree(nodes, id) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === id) return nodes.splice(i, 1)[0];
+    if (nodes[i].children) {
+      const found = removeFromMapTree(nodes[i].children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function insertInMapTree(nodes, targetId, node, pos) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === targetId) {
+      nodes.splice(pos === 'before' ? i : i + 1, 0, node);
+      return true;
+    }
+    if (nodes[i].children && insertInMapTree(nodes[i].children, targetId, node, pos)) return true;
+  }
+  return false;
+}
+
+function isMapDescendant(node, targetId) {
+  for (const child of (node.children || [])) {
+    if (child.id === targetId || isMapDescendant(child, targetId)) return true;
+  }
+  return false;
 }
 
 function findMapNode(nodes, id) {
@@ -1435,7 +1573,12 @@ function renderMapNode(node) {
   const showChildren = !collapsed && (hasChildren || mapPendingParent === node.id);
   return `
     <div class="map-node urgency-${urg}${node.id===selectedMapId?' selected':''}">
-      <div class="map-node-row">
+      <div class="map-node-row" draggable="true"
+        ondragstart="onMapDragStart(event,'${node.id}')"
+        ondragover="onMapDragOver(event,'${node.id}')"
+        ondrop="onMapDrop(event,'${node.id}')"
+        ondragend="onMapDragEnd(event)">
+        <i class="ti ti-grip-vertical map-grip"></i>
         <button class="icon-btn" onclick="toggleMapCollapse('${node.id}')" style="width:20px;height:20px;font-size:11px;flex-shrink:0">
           ${hasChildren ? `<i class="ti ti-chevron-${collapsed?'right':'down'}"></i>` : '<span style="width:8px;display:inline-block"></span>'}
         </button>
