@@ -289,6 +289,7 @@ body {
 .map-node-row {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: var(--radius);
+  position: relative;
   border: 1px solid var(--border); background: var(--bg);
   transition: border-color 0.12s;
 }
@@ -302,12 +303,16 @@ body {
 .map-node.urgency-medium .urgency-dot { background: #42A5F5; box-shadow: 0 0 5px rgba(66,165,245,0.6); }
 .map-node.urgency-normal .urgency-dot { background: var(--border2); }
 .map-node.selected > .map-node-row { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
-.map-node-row.map-drop-before { border-top: 2.5px solid var(--accent) !important; }
-.map-node-row.map-drop-after  { border-bottom: 2.5px solid var(--accent) !important; }
-.map-node-row.map-drop-child  { background: rgba(0,188,212,0.1) !important; border-color: var(--accent) !important; }
+.map-node-row.map-drop-before::before {
+  content: ''; position: absolute; top: -2px; left: 8px; right: 8px;
+  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none;
+}
+.map-node-row.map-drop-after::after {
+  content: ''; position: absolute; bottom: -2px; left: 8px; right: 8px;
+  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none;
+}
 .map-node.map-dragging > .map-node-row { opacity: 0.35; }
 .map-grip { color: var(--text3); font-size: 11px; cursor: grab; flex-shrink: 0; }
-#mapTree.promote-hint { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--radius); }
 
 /* Map depth styling */
 .map-depth-0 > .map-node-row {
@@ -487,11 +492,10 @@ body {
       </div>
       <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:0.75rem">
         ● をクリックで緊急度切替（赤=高・青=中・グレー=通常）／ノード名をダブルクリックで編集<br>
-        ノード選択後：Enter で子追加 ／ ← 上の階層へ ／ → 下の階層へ ／ Esc で選択解除
+        ノード選択後：↑↓ 上下に移動 ／ ← 上の階層へ ／ → 下の階層へ ／ Enter で子追加 ／ Esc で選択解除
       </div>
       <div id="mapTree" style="display:flex;flex-direction:column;gap:3px"
         ondragover="onMapTreeDragOver(event)" ondrop="onMapTreeDrop(event)"></div>
-      <div id="mapPromoteHint" style="display:none;font-size:11px;color:var(--accent);font-family:'DM Mono',monospace;text-align:center;padding-top:6px">← ドロップで上の階層へ昇格</div>
     </div>
   </div>
 
@@ -559,7 +563,7 @@ body {
       <div class="setting-row"><span class="setting-label">インテグレーショントークン</span></div>
       <input type="password" id="cfgNotionToken" placeholder="ntn_xxxxxxxxxxxx" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
       <div class="setting-row"><span class="setting-label">データベースID</span></div>
-      <input type="text" id="cfgNotionDb" placeholder="d6e9bcbfdf45443187709ebbd727b374" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
+      <input type="text" id="cfgNotionDb" placeholder="（NotionデータベースURLの32桁ID）" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
       <div class="setting-row"><span class="setting-label">タスクマップ用ページID</span></div>
       <input type="text" id="cfgMapPageId" placeholder="Notionページ URL末尾の32桁" style="width:100%;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;margin-bottom:10px;outline:none"/>
       <div style="display:flex;gap:8px;align-items:center">
@@ -577,8 +581,12 @@ const MODES = { work:'作業中', short:'短い休憩', long:'長い休憩' };
 const DAYS = ['日','月','火','水','木','金','土'];
 const MODE_COLOR = { work:'#00BCD4', short:'#26C6DA', long:'#80DEEA' };
 
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
-let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null, dragSrcMapId=null, dragStartX=0;
+let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null, dragSrcMapId=null;
 
 function load() {
   cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'' };
@@ -597,7 +605,7 @@ function load() {
   document.getElementById('cfgLunchStart').value = cfg.lunchStart || '12:00';
   document.getElementById('cfgLunchEnd').value   = cfg.lunchEnd   || '13:00';
   const nt = localStorage.getItem('pom_notion_token')   || '';
-  const nd = localStorage.getItem('pom_notion_db')      || 'd6e9bcbfdf45443187709ebbd727b374';
+  const nd = localStorage.getItem('pom_notion_db')      || '';
   const nm = localStorage.getItem('pom_map_page_id')    || '';
   document.getElementById('cfgNotionToken').value  = nt;
   document.getElementById('cfgNotionDb').value     = nd;
@@ -684,8 +692,8 @@ function showImportPreview(data) {
   el.innerHTML = importBuf.map((t,i) => {
     const pom = Math.max(1, Math.ceil(t.durationMin / 30));
     return `<div class="preview-item">
-      <label><input type="checkbox" id="imp-${i}" ${t.isMeeting?'checked':''}/>${t.title}</label>
-      <span class="preview-time">${t.startTime}〜${t.endTime}</span>
+      <label><input type="checkbox" id="imp-${i}" ${t.isMeeting?'checked':''}/>${esc(t.title)}</label>
+      <span class="preview-time">${esc(t.startTime)}〜${esc(t.endTime)}</span>
       <span class="preview-pom">🍅×${pom}</span>
     </div>`;
   }).join('');
@@ -830,8 +838,8 @@ function renderTimerTasks() {
       <i class="ti ti-grip-vertical" style="color:var(--text3);font-size:12px;flex-shrink:0;cursor:grab"></i>
       <div class="task-check">${t.completed?'<i class="ti ti-check" style="font-size:11px;color:#fff"></i>':''}</div>
       <div style="flex:1;min-width:0" onclick="event.stopPropagation()">
-        <div class="task-name" ondblclick="startEditTask(${i}, this)" title="ダブルクリックで編集">${t.name}</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${t.sub?`<span class="task-sub">${t.sub}</span>`:''} ${!t.completed && estimates[i] ? `<span class="task-eta">〜 ${estimates[i]}</span>` : ''}</div>
+        <div class="task-name" ondblclick="startEditTask(${i}, this)" title="ダブルクリックで編集">${esc(t.name)}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${t.sub?`<span class="task-sub">${esc(t.sub)}</span>`:''} ${!t.completed && estimates[i] ? `<span class="task-eta">〜 ${estimates[i]}</span>` : ''}</div>
       </div>
       <span style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace">${t.done}/</span>
       <input class="pom-edit" type="number" min="1" max="99" value="${t.total}"
@@ -1042,7 +1050,7 @@ function updateCurrentTaskBar() {
   }
   const t=tasks[activeIdx];
   bar.innerHTML=`<i class="ti ti-focus" style="color:var(--accent);font-size:16px"></i>
-    <span class="task-label">${t.name}</span>
+    <span class="task-label">${esc(t.name)}</span>
     <span class="task-pom" style="font-size:13px;color:var(--text3);font-family:'DM Mono',monospace">${t.done}/${t.total}</span>`;
 }
 function deferTask(i) {
@@ -1073,7 +1081,7 @@ function addTask(name, total, sub) {
   tasks.push({name:n, total:t, done:0, completed:false, sub:sub||''});
   if(nameEl) nameEl.value='';
   if(pomEl)  pomEl.value='1';
-  save(); renderTasks(); scheduleMeetingAlerts();
+  save(); renderTasks(); renderTimerTasks(); scheduleMeetingAlerts();
 }
 function renderTasks() {
   const el = document.getElementById('taskList');
@@ -1083,8 +1091,8 @@ function renderTasks() {
     <div class="task-item ${i===activeIdx?'is-active':''} ${t.completed?'is-done':''}" onclick="selectTask(${i})">
       <div class="task-check">${t.completed?'<i class="ti ti-check" style="font-size:11px;color:#fff"></i>':''}</div>
       <div style="flex:1;min-width:0">
-        <div class="task-name">${t.name}</div>
-        ${t.sub?`<div class="task-sub">${t.sub}</div>`:''}
+        <div class="task-name">${esc(t.name)}</div>
+        ${t.sub?`<div class="task-sub">${esc(t.sub)}</div>`:''}
       </div>
       <span style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-right:2px">${t.done}/</span>
       <input class="pom-edit" type="number" min="1" max="99" value="${t.total}"
@@ -1202,8 +1210,8 @@ function renderDeferred() {
   list.innerHTML = deferred.map((t,i) => `
     <div class="task-item" style="margin-bottom:4px">
       <div style="flex:1;min-width:0">
-        <div class="task-name">${t.name}</div>
-        ${t.sub ? `<div class="task-sub">${t.sub}</div>` : ''}
+        <div class="task-name">${esc(t.name)}</div>
+        ${t.sub ? `<div class="task-sub">${esc(t.sub)}</div>` : ''}
       </div>
       <span style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-right:8px">${t.total}pom</span>
       <button class="icon-btn" onclick="restoreDeferred(${i})" title="今日に戻す" style="color:var(--accent)"><i class="ti ti-arrow-back-up" style="font-size:14px"></i></button>
@@ -1348,7 +1356,7 @@ function renderHistory() {
       ${items.map(h=>`
         <div class="history-item">
           <span class="h-badge ${h.mode!=='work'?'break':''}">${MODES[h.mode]}</span>
-          <span class="h-task">${h.task}</span>
+          <span class="h-task">${esc(h.task)}</span>
           <span class="h-time">${h.time}</span>
         </div>`).join('')}
     </div>`).join('');
@@ -1506,89 +1514,53 @@ let _mapDragOverEl = null;
 function onMapDragStart(e, id) {
   if (e.target.matches('input, button')) { e.preventDefault(); return; }
   dragSrcMapId = id;
-  dragStartX = e.clientX;
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => document.getElementById('map-node-' + id)?.classList.add('map-dragging'), 0);
 }
 
-function _isPromoteDrag(clientX) { return clientX < dragStartX - 60; }
-
-// 上端20%=before、下端15%=after、それ以外=child（入れ子）
+// 上半分=before、下半分=after
 function _mapDropZone(el, clientY) {
   const rect = el.getBoundingClientRect();
-  const y = clientY - rect.top;
-  const h = rect.height;
-  if (y < h * 0.2)  return 'map-drop-before';
-  if (y > h * 0.85) return 'map-drop-after';
-  return 'map-drop-child';
+  return (clientY - rect.top) < rect.height * 0.5 ? 'map-drop-before' : 'map-drop-after';
 }
 
 function onMapDragOver(e, id) {
-  if (!dragSrcMapId) return;
+  if (!dragSrcMapId || dragSrcMapId === id) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-
-  if (_isPromoteDrag(e.clientX)) {
-    if (_mapDragOverEl) { _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child'); _mapDragOverEl = null; }
-    _showPromoteHint(true);
-    return;
-  }
-  _showPromoteHint(false);
-  if (dragSrcMapId === id) return;
 
   const el = e.currentTarget;
   const zone = _mapDropZone(el, e.clientY);
   if (_mapDragOverEl !== el) {
-    _mapDragOverEl?.classList.remove('map-drop-before','map-drop-after','map-drop-child');
+    _mapDragOverEl?.classList.remove('map-drop-before', 'map-drop-after');
     _mapDragOverEl = el;
   }
-  el.classList.remove('map-drop-before','map-drop-after','map-drop-child');
-  el.classList.add(zone);
+  el.classList.toggle('map-drop-before', zone === 'map-drop-before');
+  el.classList.toggle('map-drop-after',  zone === 'map-drop-after');
 }
 
 function onMapTreeDragOver(e) {
   if (!dragSrcMapId) return;
   e.preventDefault();
-  if (_mapDragOverEl) { _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child'); _mapDragOverEl = null; }
-  _showPromoteHint(_isPromoteDrag(e.clientX));
 }
 
 function onMapTreeDrop(e) {
   if (!dragSrcMapId) return;
   e.preventDefault();
   clearMapDragStyles();
-  if (_isPromoteDrag(e.clientX)) promoteMapNode(dragSrcMapId);
   dragSrcMapId = null;
 }
 
 function onMapDrop(e, id) {
   e.preventDefault();
-  if (!dragSrcMapId) return;
+  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
   clearMapDragStyles();
-
-  if (_isPromoteDrag(e.clientX)) {
-    promoteMapNode(dragSrcMapId);
-    dragSrcMapId = null;
-    return;
-  }
-  if (dragSrcMapId === id) { dragSrcMapId = null; return; }
 
   const zone = _mapDropZone(e.currentTarget, e.clientY);
   const srcNode = removeFromMapTree(mapData, dragSrcMapId);
   if (!srcNode) { dragSrcMapId = null; return; }
 
-  if (zone === 'map-drop-before') {
-    insertInMapTree(mapData, id, srcNode, 'before');
-  } else if (zone === 'map-drop-after') {
-    insertInMapTree(mapData, id, srcNode, 'after');
-  } else {
-    if (!isMapDescendant(srcNode, id)) {
-      const target = findMapNode(mapData, id);
-      if (target) { target.children = target.children || []; target.children.push(srcNode); }
-    } else {
-      mapData.push(srcNode);
-    }
-  }
+  insertInMapTree(mapData, id, srcNode, zone === 'map-drop-before' ? 'before' : 'after');
   dragSrcMapId = null;
   saveMap(); renderMap();
 }
@@ -1596,25 +1568,16 @@ function onMapDrop(e, id) {
 function onMapDragEnd(e) {
   dragSrcMapId = null;
   document.querySelectorAll('.map-node-row').forEach(el =>
-    el.classList.remove('map-drop-before','map-drop-after','map-drop-child'));
+    el.classList.remove('map-drop-before', 'map-drop-after'));
   document.querySelectorAll('.map-node.map-dragging').forEach(el => el.classList.remove('map-dragging'));
-  _showPromoteHint(false);
   _mapDragOverEl = null;
 }
 
 function clearMapDragStyles() {
   if (_mapDragOverEl) {
-    _mapDragOverEl.classList.remove('map-drop-before','map-drop-after','map-drop-child');
+    _mapDragOverEl.classList.remove('map-drop-before', 'map-drop-after');
     _mapDragOverEl = null;
   }
-  _showPromoteHint(false);
-}
-
-function _showPromoteHint(show) {
-  const tree = document.getElementById('mapTree');
-  const hint = document.getElementById('mapPromoteHint');
-  if (tree) tree.classList.toggle('promote-hint', show);
-  if (hint) hint.style.display = show ? 'block' : 'none';
 }
 
 function removeFromMapTree(nodes, id) {
@@ -1681,7 +1644,7 @@ function renderMapNode(node, depth) {
           ${hasChildren ? `<i class="ti ti-chevron-${collapsed?'right':'down'}"></i>` : '<span style="width:8px;display:inline-block"></span>'}
         </button>
         <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
-        <span class="map-node-name" style="flex:1;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${node.name}</span>
+        <span class="map-node-name" style="flex:1;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
         <button class="icon-btn" onclick="startAddMapChild('${node.id}')" title="子ノードを追加" style="font-size:13px"><i class="ti ti-plus"></i></button>
         <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent);font-size:13px"><i class="ti ti-clock-play"></i></button>
         <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除" style="font-size:13px"><i class="ti ti-x"></i></button>
@@ -1822,6 +1785,16 @@ function promoteMapNode(id) {
   saveMap(); renderMap();
 }
 
+function moveMapNode(id, dir) {
+  const ctx = findMapParentContext(id);
+  if (!ctx) return;
+  const { siblings, index } = ctx;
+  const newIdx = index + dir;
+  if (newIdx < 0 || newIdx >= siblings.length) return;
+  [siblings[index], siblings[newIdx]] = [siblings[newIdx], siblings[index]];
+  saveMap(); renderMap();
+}
+
 // → : 1つ下の階層へ降格（直前の兄弟の最後の子になる）
 function demoteMapNode(id) {
   const ctx = findMapParentContext(id);
@@ -1840,6 +1813,14 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
     startAddMapChild(selectedMapId);
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    moveMapNode(selectedMapId, -1);
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    moveMapNode(selectedMapId, 1);
   }
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
