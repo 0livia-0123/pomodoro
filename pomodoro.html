@@ -1020,7 +1020,13 @@ function onSessionEnd() {
   }
 
   if(cfg.autoBreak) {
-    setTimeout(()=>{ setMode(next); toggleTimer(); }, 700);
+    if(isWork) {
+      // 作業終了 → 自動で休憩へ移行＆開始
+      setTimeout(()=>{ setMode(next); toggleTimer(); }, 700);
+    } else {
+      // 休憩終了 → 作業モードに切り替えるだけ（手動で開始）
+      setTimeout(()=>{ setMode(next); }, 700);
+    }
   }
 }
 
