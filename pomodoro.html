@@ -797,6 +797,46 @@ function saveToNotion(session) {
   document.body.appendChild(script);
 }
 
+function loadHistoryFromNotion() {
+  const token  = localStorage.getItem('pom_notion_token') || '';
+  const dbId   = localStorage.getItem('pom_notion_db')    || '';
+  const gasUrl = cfg.gasUrl || '';
+  if (!token || !dbId || !gasUrl) return;
+
+  const listEl = document.getElementById('historyList');
+  const indicator = document.createElement('div');
+  indicator.id = 'notionHistIndicator';
+  indicator.style.cssText = 'font-size:11px;color:var(--text3);font-family:"DM Mono",monospace;text-align:right;padding-bottom:6px';
+  indicator.textContent = 'Notionから同期中...';
+  listEl?.parentElement?.insertBefore(indicator, listEl);
+
+  const cb = 'loadHistCb_' + Date.now();
+  const params = new URLSearchParams({ action: 'loadHistory', callback: cb, token, dbId });
+  const script = document.createElement('script');
+  script.src = gasUrl + '?' + params.toString();
+  window[cb] = function(data) {
+    delete window[cb]; document.body.removeChild(script);
+    document.getElementById('notionHistIndicator')?.remove();
+    if (!data.ok || !data.sessions || !data.sessions.length) return;
+    history.length = 0;
+    data.sessions.forEach(s => history.push(s));
+    // statsをNotionデータから再構築して統計グラフも正確に
+    const newDaily = {};
+    data.sessions.forEach(s => {
+      if (s.mode === 'work') newDaily[s.date] = (newDaily[s.date] || 0) + 1;
+    });
+    stats.daily = newDaily;
+    save();
+    renderHistory();
+    updateTimerStats();
+  };
+  script.onerror = () => {
+    delete window[cb]; document.body.removeChild(script);
+    document.getElementById('notionHistIndicator')?.remove();
+  };
+  document.body.appendChild(script);
+}
+
 function getWeekNumber(d) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay()||7));
@@ -1393,7 +1433,7 @@ function switchView(v) {
   const navEl  = document.getElementById('nav-'+v);
   if(viewEl) viewEl.classList.add('active');
   if(navEl)  navEl.classList.add('active');
-  if(v==='history') renderHistory();
+  if(v==='history') { renderHistory(); loadHistoryFromNotion(); }
   if(v==='timer') updateTimerStats();
   if(v==='map') renderMap();
 }
