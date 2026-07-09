@@ -591,6 +591,34 @@ function esc(s) {
 let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
 let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null, dragSrcMapId=null;
 
+// 日付が変わったかを判定し、変わっていれば完了タスクのクリア＆持ち越しタスクの復活を行う
+// ページを開きっぱなしでも日付をまたいだ瞬間に呼べるよう、load()と定期チェックの両方から使う
+function checkDayRollover() {
+  const today = todayKey();
+  const lastOpenDate = localStorage.getItem('pom_last_open') || '';
+  localStorage.setItem('pom_last_open', today);
+  if(!lastOpenDate || lastOpenDate === today) return false;
+
+  // 連続記録：昨日なら継続、2日以上空いたらリセット
+  const diff = Math.round((new Date(today) - new Date(lastOpenDate)) / 86400000);
+  if(diff > 1) { stats.streak = 0; }
+  // 完了済みタスクをクリア
+  tasks = tasks.filter(t => !t.completed);
+  // 持ち越しタスクをtasksの先頭に追加
+  if(deferred.length) {
+    tasks = [...deferred, ...tasks];
+    deferred = [];
+    localStorage.setItem('pom_deferred', '[]');
+  }
+  activeIdx = tasks.length ? 0 : -1;
+  save();
+  renderTasks();
+  renderTimerTasks();
+  renderDeferred();
+  updateCurrentTaskBar();
+  return true;
+}
+
 function load() {
   cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'' };
   tasks     = JSON.parse(localStorage.getItem('pom_tasks')  || '[]');
@@ -616,25 +644,7 @@ function load() {
   if(tasks.length && activeIdx<0) activeIdx=0;
 
   // 日付をまたいでいたら完了タスクをクリア＆持ち越しタスクを復活
-  const today = todayKey();
-  const lastOpenDate = localStorage.getItem('pom_last_open') || '';
-  if(lastOpenDate && lastOpenDate !== today) {
-    // 連続記録：昨日なら継続、2日以上空いたらリセット
-    const diff = Math.round((new Date(today) - new Date(lastOpenDate)) / 86400000);
-    if(diff > 1) { stats.streak = 0; save(); }
-    // 完了済みタスクをクリア
-    tasks = tasks.filter(t => !t.completed);
-    // 持ち越しタスクをtasksの先頭に追加
-    if(deferred.length) {
-      tasks = [...deferred, ...tasks];
-      deferred = [];
-      localStorage.setItem('pom_deferred', '[]');
-    }
-    activeIdx = tasks.length ? 0 : -1;
-    localStorage.setItem('pom_tasks', JSON.stringify(tasks));
-  }
-  // 今日の起動日を記録
-  localStorage.setItem('pom_last_open', today);
+  checkDayRollover();
 
   loadMapData();
   setMode('work', true);
@@ -1119,7 +1129,7 @@ function removeTask(i) {
   tasks.splice(i,1);
   if(activeIdx===i){ activeIdx=-1; updateCurrentTaskBar(); }
   else if(activeIdx>i) activeIdx--;
-  save(); renderTasks();
+  save(); renderTasks(); renderTimerTasks();
 }
 function addTask(name, total, sub) {
   const nameEl = document.getElementById('newName');
@@ -1894,6 +1904,12 @@ function addToTodayFromMap(id) {
 load();
 scheduleMeetingAlerts();
 updateTimerStats();
+
+// 開きっぱなしのタブでも日付が変わったら自動でリフレッシュする
+setInterval(checkDayRollover, 60000);
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) checkDayRollover();
+});
 </script>
 </body>
 </html>
