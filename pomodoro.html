@@ -38,6 +38,7 @@ body {
   padding: 2rem 2rem 4rem;
 }
 #app { width: 100%; max-width: 1100px; }
+#app.map-view-active { max-width: none; } /* タスクマップ表示中は画面幅いっぱいに広げる */
 
 /* Header */
 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
@@ -135,6 +136,7 @@ body {
   padding: 7px 12px; background: var(--bg);
   border: 1px solid var(--border); border-radius: var(--radius);
   cursor: pointer; transition: all 0.12s;
+  user-select: none;
 }
 .task-item:hover { border-color: var(--border2); }
 .task-item.is-active { border-color: var(--accent); background: rgba(0,188,212,0.06); }
@@ -284,71 +286,148 @@ body {
 .bar.today { background: var(--accent); box-shadow: 0 0 8px rgba(0,188,212,0.4); }
 .bar-label { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
 
-/* Map view */
-.map-node { margin-bottom: 3px; }
-.map-node-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius: var(--radius);
-  position: relative;
-  border: 1px solid var(--border); background: var(--bg);
-  transition: border-color 0.12s;
+/* Map view — Kanban board (list > sub-list > card, 3 tiers) */
+.map-view-card { padding: 0.85rem 1.25rem 1rem; }
+.map-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.map-toolbar-add { flex: 0 0 auto; margin-bottom: 0; }
+.map-toolbar-add input[type=text] { width: 280px; }
+.map-toolbar-hint {
+  flex: 1; min-width: 260px;
+  font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace;
 }
-.map-node-row:hover { border-color: var(--border2); }
-.map-node.urgency-high   > .map-node-row { background: rgba(239,83,80,0.07);  border-color: rgba(239,83,80,0.35); }
-.map-node.urgency-medium > .map-node-row { background: rgba(66,165,245,0.07); border-color: rgba(66,165,245,0.35); }
-.map-node-children { margin-left: 12px; padding-left: 12px; border-left: 1.5px solid var(--border); margin-top: 3px; display: flex; flex-direction: column; gap: 3px; }
 .urgency-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; cursor: pointer; transition: transform 0.12s; }
 .urgency-dot:hover { transform: scale(1.4); }
-.map-node.urgency-high   .urgency-dot { background: #EF5350; box-shadow: 0 0 5px rgba(239,83,80,0.6); }
-.map-node.urgency-medium .urgency-dot { background: #42A5F5; box-shadow: 0 0 5px rgba(66,165,245,0.6); }
-.map-node.urgency-normal .urgency-dot { background: var(--border2); }
-.map-node.selected > .map-node-row { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
-.map-node-row.map-drop-before::before {
-  content: ''; position: absolute; top: -2px; left: 8px; right: 8px;
-  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none;
-}
-.map-node-row.map-drop-after::after {
-  content: ''; position: absolute; bottom: -2px; left: 8px; right: 8px;
-  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none;
-}
-.map-node.map-dragging > .map-node-row { opacity: 0.35; }
+.urgency-high   .urgency-dot { background: #EF5350; box-shadow: 0 0 5px rgba(239,83,80,0.6); }
+.urgency-medium .urgency-dot { background: #42A5F5; box-shadow: 0 0 5px rgba(66,165,245,0.6); }
+.urgency-normal .urgency-dot { background: var(--border2); }
 .map-grip { color: var(--text3); font-size: 11px; cursor: grab; flex-shrink: 0; }
 
-/* Map depth styling */
-.map-depth-0 > .map-node-row {
-  background: var(--surface); border-color: var(--border2);
-  padding: 9px 12px;
+/* リスト（列・サブリスト）の色ラベル */
+.map-color-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; cursor: pointer; transition: transform 0.12s; background: var(--border2); border: 1px solid rgba(0,0,0,0.06); }
+.map-color-dot:hover { transform: scale(1.3); }
+.map-color-picker {
+  position: absolute; z-index: 80; display: flex; flex-wrap: wrap; width: 132px; gap: 7px; padding: 9px;
+  background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.16);
 }
-.map-depth-0 > .map-node-row .map-node-name {
-  font-size: 15px; font-weight: 500; letter-spacing: 0.01em;
-}
-.map-depth-1 > .map-node-row .map-node-name {
-  font-size: 14px; font-weight: 400;
-}
-.map-depth-deep > .map-node-row {
-  padding: 4px 8px; border-color: transparent;
-}
-.map-depth-deep > .map-node-row:hover { border-color: var(--border); }
-.map-depth-deep > .map-node-row .map-node-name {
-  font-size: 13px; font-weight: 300; color: var(--text2);
-}
-.map-depth-deep > .map-node-row .icon-btn { width: 24px; height: 24px; font-size: 11px; }
-.map-depth-deep > .map-node-row .urgency-dot { width: 7px; height: 7px; }
-.map-depth-deep > .map-node-row .map-grip { font-size: 10px; }
+.map-color-swatch { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.08); transition: transform 0.1s; }
+.map-color-swatch:hover { transform: scale(1.15); }
+.map-color-swatch-none { background: var(--surface2); border: 1.5px dashed var(--text3); }
 
-/* 緊急度ノードのテキストに色を付けて視認性アップ */
-.map-node.urgency-high > .map-node-row .map-node-name {
-  color: #C62828; font-weight: 500;
+/* 列を縦に積んでいき、画面の高さを使い切ったら次の横スロットへ折り返す
+   （＝短い列は同じ横位置に2つ縦に並び、長い列は1列で高さいっぱいを使う。
+   　余白を詰めるための「マソンリー」風レイアウト） */
+.map-board {
+  display: flex; flex-direction: column; flex-wrap: wrap;
+  align-content: flex-start; align-items: flex-start;
+  height: calc(100vh - 260px); min-height: 320px;
+  gap: 14px;
+  overflow-x: auto; overflow-y: hidden; padding-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
 }
-.map-node.urgency-medium > .map-node-row .map-node-name {
-  color: #1565C0; font-weight: 500;
+
+/* Column (depth 0) */
+.map-column {
+  width: 350px; flex: 0 0 auto; max-height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-lg);
+  padding: 10px; position: relative;
 }
-/* depth-deep の場合はさらに明示的に上書き */
-.map-depth-deep.urgency-high > .map-node-row .map-node-name {
-  color: #C62828; font-weight: 400;
+.map-column.map-dragging { opacity: 0.35; }
+.map-column.selected > .map-column-header { box-shadow: 0 0 0 2px rgba(0,188,212,0.25); border-radius: var(--radius); }
+.map-column-header {
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px 10px; cursor: grab; user-select: none;
 }
-.map-depth-deep.urgency-medium > .map-node-row .map-node-name {
-  color: #1565C0; font-weight: 400;
+.map-column-header .map-node-name {
+  flex: 1; font-size: 15px; font-weight: 500; letter-spacing: 0.01em; cursor: pointer; min-width: 0;
+  white-space: normal; overflow-wrap: break-word; word-break: break-word; line-height: 1.3;
+}
+.map-column-body {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 44px; position: relative;
+}
+
+/* Sub-list (depth 1, type=list) — accordion */
+.map-sublist {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  position: relative;
+}
+.map-sublist.map-dragging { opacity: 0.35; }
+.map-sublist.selected > .map-sublist-header { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
+.map-sublist-header {
+  display: flex; align-items: center; gap: 6px; padding: 7px 8px; cursor: grab; user-select: none; border-radius: var(--radius);
+  border: 1px solid transparent;
+}
+.map-sublist-header .map-node-name {
+  flex: 1; font-size: 13.5px; font-weight: 400; cursor: pointer; min-width: 0;
+  white-space: normal; overflow-wrap: break-word; word-break: break-word; line-height: 1.3;
+}
+.map-sublist-header .icon-btn { width: 24px; height: 24px; font-size: 11px; }
+.map-sublist-count { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; flex-shrink: 0; }
+.map-sublist-body {
+  display: flex; flex-direction: column; gap: 4px; padding: 2px 6px 8px 10px; min-height: 32px; position: relative;
+}
+.map-sublist.collapsed .map-sublist-body { display: none; }
+
+/* Card (leaf, depth 1 or 2) */
+.map-card {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 9px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg);
+  cursor: grab; user-select: none; transition: border-color 0.12s; position: relative;
+}
+.map-card:hover { border-color: var(--border2); }
+.map-card.map-dragging { opacity: 0.35; }
+.map-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,188,212,0.12); }
+.map-card.urgency-high   { background: rgba(239,83,80,0.07);  border-color: rgba(239,83,80,0.35); }
+.map-card.urgency-medium { background: rgba(66,165,245,0.07); border-color: rgba(66,165,245,0.35); }
+.map-card .map-node-name {
+  flex: 1; font-size: 13.5px; font-weight: 400; cursor: pointer; min-width: 0;
+  white-space: normal; overflow-wrap: break-word; word-break: break-word; line-height: 1.3;
+}
+.map-card.urgency-high   .map-node-name { color: #C62828; font-weight: 500; }
+.map-card.urgency-medium .map-node-name { color: #1565C0; font-weight: 500; }
+.map-card .icon-btn { width: 24px; height: 24px; font-size: 11px; }
+
+/* Drop indicators */
+.map-drop-before::before {
+  content: ''; position: absolute; top: -4px; left: 4px; right: 4px;
+  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 2;
+}
+.map-drop-after::after {
+  content: ''; position: absolute; bottom: -4px; left: 4px; right: 4px;
+  height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 2;
+}
+.map-col-drop-before::before {
+  content: ''; position: absolute; top: 4px; bottom: 4px; left: -8px;
+  width: 3px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 2;
+}
+.map-col-drop-after::after {
+  content: ''; position: absolute; top: 4px; bottom: 4px; right: -8px;
+  width: 3px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 2;
+}
+.map-drop-into {
+  outline: 2px dashed var(--accent); outline-offset: -2px;
+  background: rgba(0,188,212,0.06); border-radius: var(--radius);
+}
+
+/* Pending inline add row (shared) */
+.map-inline-add {
+  display: flex; align-items: center; gap: 4px;
+  border: 1px solid var(--accent); background: rgba(0,188,212,0.04); border-radius: var(--radius);
+  padding: 6px 8px;
+}
+.map-inline-add input {
+  flex: 1; border: none; background: transparent; color: var(--text); font-size: 13.5px; outline: none;
+  font-family: 'DM Sans', sans-serif;
+}
+
+@media (max-width: 800px) {
+  .map-column { width: 270px; }
+}
+@media (max-width: 480px) {
+  .map-column { width: 210px; padding: 8px; }
+  .map-column-header .map-node-name { font-size: 14px; }
+  .map-sublist-header .map-node-name, .map-card .map-node-name { font-size: 13px; }
 }
 
 </style>
@@ -487,17 +566,17 @@ body {
 
   <!-- MAP -->
   <div id="view-map" class="view">
-    <div class="card">
-      <div class="card-title">タスクマップ</div>
-      <div class="add-row" style="margin-bottom:0.5rem">
-        <input type="text" id="mapNewName" placeholder="ルートノードを追加…" onkeydown="if(event.key==='Enter')addMapRoot()"/>
-        <button class="btn btn-sm" onclick="addMapRoot()"><i class="ti ti-plus"></i>追加</button>
+    <div class="card map-view-card">
+      <div class="map-toolbar">
+        <div class="add-row map-toolbar-add">
+          <input type="text" id="mapNewName" placeholder="リスト（列）を追加…" onkeydown="if(event.key==='Enter')addMapRoot()"/>
+          <button class="btn btn-sm" onclick="addMapRoot()"><i class="ti ti-plus"></i>追加</button>
+        </div>
+        <div class="map-toolbar-hint">
+          ● で色／緊急度を設定／名前をダブルクリックで編集／▶でサブリスト開閉／カード・サブリスト・列はドラッグで並べ替え・移動
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:0.75rem">
-        ● をクリックで緊急度切替（赤=高・青=中・グレー=通常）／ノード名をダブルクリックで編集<br>
-        ノード選択後：↑↓ 上下に移動 ／ ← 上の階層へ ／ → 下の階層へ ／ Enter で子追加 ／ Esc で選択解除
-      </div>
-      <div id="mapTree" style="display:flex;flex-direction:column;gap:3px"
+      <div id="mapTree" class="map-board"
         ondragover="onMapTreeDragOver(event)" ondrop="onMapTreeDrop(event)"></div>
     </div>
   </div>
@@ -524,6 +603,31 @@ body {
       <div class="setting-row">
         <span class="setting-label">セッション終了後に自動で休憩へ</span>
         <input type="checkbox" id="cfgAutoBreak" style="width:18px;height:18px;accent-color:var(--accent)"/>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">終了音の音量</span>
+        <input type="range" id="cfgVolume" min="0" max="100" step="5" value="70"
+          oninput="document.getElementById('cfgVolumeLabel').textContent=this.value+'%'"
+          style="flex:0 0 130px;accent-color:var(--accent)"/>
+        <span class="setting-unit" id="cfgVolumeLabel" style="width:38px;text-align:right">70%</span>
+        <button class="icon-btn" onclick="beep(parseInt(document.getElementById('cfgVolume').value),document.getElementById('cfgSoundType').value)" title="音を再生して確認"><i class="ti ti-volume"></i></button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">通知音の種類</span>
+        <select id="cfgSoundType" style="height:34px;padding:0 8px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;outline:none">
+          <option value="chime">チャイム</option>
+          <option value="bell">ベル</option>
+          <option value="soft">ソフト</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">1日の目標ポモドーロ数</span>
+        <input type="number" id="cfgDailyGoal" min="0" max="30" value="8"/>
+        <span class="setting-unit">回（0で非表示）</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">デスクトップ通知（タブが非アクティブな時に通知）</span>
+        <input type="checkbox" id="cfgDesktopNotify" style="width:18px;height:18px;accent-color:var(--accent)"/>
       </div>
       <div class="setting-row">
         <span class="setting-label">長い休憩（何ポモドーロごと）</span>
@@ -589,7 +693,7 @@ function esc(s) {
 }
 
 let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
-let mapData=[], mapCollapsed={}, mapPendingParent=null, selectedMapId=null, dragSrcMapId=null;
+let mapData=[], mapCollapsed={}, mapPendingParent=null, mapPendingType=null, mapPendingAfterId=null, selectedMapId=null, dragSrcMapId=null;
 
 // 日付が変わったかを判定し、変わっていれば完了タスクのクリア＆持ち越しタスクの復活を行う
 // ページを開きっぱなしでも日付をまたいだ瞬間に呼べるよう、load()と定期チェックの両方から使う
@@ -620,7 +724,12 @@ function checkDayRollover() {
 }
 
 function load() {
-  cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'' };
+  cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'', volume:70, soundType:'chime', dailyGoal:8, desktopNotify:false };
+  // 既存ユーザーのデータには無い項目があるので補完
+  if(cfg.volume === undefined) cfg.volume = 70;
+  if(cfg.soundType === undefined) cfg.soundType = 'chime';
+  if(cfg.dailyGoal === undefined) cfg.dailyGoal = 8;
+  if(cfg.desktopNotify === undefined) cfg.desktopNotify = false;
   tasks     = JSON.parse(localStorage.getItem('pom_tasks')  || '[]');
   history   = JSON.parse(localStorage.getItem('pom_hist')   || '[]');
   stats     = JSON.parse(localStorage.getItem('pom_stats')  || 'null') || { daily:{}, streak:0, lastDate:'' };
@@ -635,6 +744,11 @@ function load() {
   document.getElementById('cfgLunchEnabled').checked = cfg.lunchEnabled !== false;
   document.getElementById('cfgLunchStart').value = cfg.lunchStart || '12:00';
   document.getElementById('cfgLunchEnd').value   = cfg.lunchEnd   || '13:00';
+  document.getElementById('cfgVolume').value = cfg.volume;
+  document.getElementById('cfgVolumeLabel').textContent = cfg.volume + '%';
+  document.getElementById('cfgSoundType').value = cfg.soundType;
+  document.getElementById('cfgDailyGoal').value = cfg.dailyGoal;
+  document.getElementById('cfgDesktopNotify').checked = cfg.desktopNotify;
   const nt = localStorage.getItem('pom_notion_token')   || '';
   const nd = localStorage.getItem('pom_notion_db')      || '';
   const nm = localStorage.getItem('pom_map_page_id')    || '';
@@ -882,7 +996,7 @@ function renderTimerTasks() {
     <div class="task-item ${i===activeIdx?'is-active':''} ${t.completed?'is-done':''}"
       draggable="true"
       data-idx="${i}"
-      onclick="selectTask(${i});renderTimerTasks()"
+      onclick="selectTask(${i})"
       ondragstart="onDragStart(event,${displayIdx})"
       ondragover="onDragOver(event)"
       ondrop="onDrop(event,${displayIdx})"
@@ -1027,7 +1141,7 @@ function resetTimer() {
 function tick() {
   remaining = Math.max(0, remaining - 1);
   render();
-  if(remaining % 60 === 0) renderTimerTasks(); // 1分ごとにETA更新
+  if(remaining % 60 === 0 && dragSrcDisplayIdx === null) renderTimerTasks(); // 1分ごとにETA更新（ドラッグ中は再描画しない）
   if(remaining<=0){ clearInterval(interval); running=false; onSessionEnd(); }
 }
 
@@ -1086,7 +1200,7 @@ function onSessionEnd() {
 function updateTimerStats() {
   const today = todayKey();
   const todayCount = stats.daily[today]||0;
-  document.getElementById('s-today').textContent  = todayCount;
+  document.getElementById('s-today').textContent  = cfg.dailyGoal ? `${todayCount}/${cfg.dailyGoal}` : todayCount;
   document.getElementById('s-time').textContent   = (todayCount*cfg.work)+'m';
   document.getElementById('s-streak').textContent = stats.streak;
 }
@@ -1322,11 +1436,12 @@ function manualComplete(i) {
   // Notionにも保存
   saveToNotion({ mode:'work', task:t.name, startTime:now, endTime:now, time:now, date:today });
 
-  // 完了したら次の未完了タスクへ自動移動
+  // 完了したら次の未完了タスクへ自動移動（選択中タスクを完了させた場合のみ）
   if(t.completed) {
-    const nextIdx = tasks.findIndex((t2, i) => i !== activeIdx && !t2.completed);
-    if(nextIdx >= 0) activeIdx = nextIdx;
-    else activeIdx = -1;
+    if(i === activeIdx) {
+      const nextIdx = tasks.findIndex((t2, idx) => idx !== activeIdx && !t2.completed);
+      activeIdx = nextIdx >= 0 ? nextIdx : -1;
+    }
     showToast('タスク完了！次のタスクへ');
   } else {
     showToast('🍅 +1');
@@ -1384,7 +1499,7 @@ function renderHistory() {
     .filter(([d])=>{ const diff=(new Date(today)-new Date(d))/86400000; return diff>=0&&diff<7; })
     .reduce((s,[,v])=>s+v,0);
   const totalMin=Object.values(stats.daily).reduce((s,v)=>s+v*cfg.work,0);
-  document.getElementById('h-today').textContent = todayCount;
+  document.getElementById('h-today').textContent = cfg.dailyGoal ? `${todayCount}/${cfg.dailyGoal}` : todayCount;
   document.getElementById('h-week').textContent  = weekCount;
   document.getElementById('h-total').textContent = totalMin+'m';
 
@@ -1431,7 +1546,32 @@ function saveSettings() {
   cfg.lunchEnabled  = document.getElementById('cfgLunchEnabled').checked;
   cfg.lunchStart    = document.getElementById('cfgLunchStart').value;
   cfg.lunchEnd      = document.getElementById('cfgLunchEnd').value;
+  cfg.volume        = parseInt(document.getElementById('cfgVolume').value)||0;
+  cfg.soundType     = document.getElementById('cfgSoundType').value;
+  cfg.dailyGoal     = Math.max(0, parseInt(document.getElementById('cfgDailyGoal').value)||0);
+  const wantsDesktopNotify = document.getElementById('cfgDesktopNotify').checked;
+  cfg.desktopNotify = wantsDesktopNotify;
   save(); setMode(currentMode, true);
+  updateTimerStats();
+
+  if(wantsDesktopNotify && 'Notification' in window && Notification.permission === 'denied') {
+    cfg.desktopNotify = false;
+    document.getElementById('cfgDesktopNotify').checked = false;
+    save();
+    alert('ブラウザの通知がブロックされているため、デスクトップ通知はOFFにしました。有効にするにはブラウザ側でこのサイトの通知を許可してください');
+    return;
+  }
+  if(wantsDesktopNotify && 'Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(perm => {
+      if(perm !== 'granted') {
+        cfg.desktopNotify = false;
+        document.getElementById('cfgDesktopNotify').checked = false;
+        save();
+      }
+      alert('設定を保存しました');
+    });
+    return;
+  }
   alert('設定を保存しました');
 }
 function clearAllData() {
@@ -1449,24 +1589,40 @@ function switchView(v) {
   if(v==='history') { renderHistory(); loadHistoryFromNotion(); }
   if(v==='timer') updateTimerStats();
   if(v==='map') renderMap();
+  document.getElementById('app').classList.toggle('map-view-active', v==='map');
 }
 
-function beep() {
+// 通知音のプリセット（freqs=音程の並び, noteGap=音の間隔, attack/hold=音量の立ち上がり・減衰時間, type=波形）
+const SOUND_PRESETS = {
+  chime: { freqs:[523,659,784,1047], noteGap:0.18, attack:0.05, hold:0.28, type:'sine' },
+  bell:  { freqs:[880,660],          noteGap:0.35, attack:0.02, hold:0.9,  type:'triangle' },
+  soft:  { freqs:[440],              noteGap:0,    attack:0.08, hold:0.5, type:'sine' },
+};
+
+function beep(volOverride, typeOverride) {
   try {
+    const vol = (volOverride ?? cfg.volume ?? 70) / 100;
+    if(vol <= 0) return; // 音量0ならミュート
     if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    [523,659,784,1047].forEach((f,i)=>{
+    const preset = SOUND_PRESETS[typeOverride ?? cfg.soundType] || SOUND_PRESETS.chime;
+    preset.freqs.forEach((f,i)=>{
       const o=audioCtx.createOscillator(),g=audioCtx.createGain();
       o.connect(g);g.connect(audioCtx.destination);
-      o.type='sine';o.frequency.value=f;
-      const t=audioCtx.currentTime+i*0.18;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.15,t+0.05);g.gain.linearRampToValueAtTime(0,t+0.28);
-      o.start(t);o.stop(t+0.3);
+      o.type=preset.type;o.frequency.value=f;
+      const t=audioCtx.currentTime+i*preset.noteGap;
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.15*vol,t+preset.attack);g.gain.linearRampToValueAtTime(0,t+preset.hold);
+      o.start(t);o.stop(t+preset.hold+0.05);
     });
   }catch(e){}
 }
 function notify() {
   // ローカルファイルでの通知許可ダイアログを避けるため、トースト＋音のみで通知
-  showToast(MODES[currentMode] + 'が終わりました！');
+  const msg = MODES[currentMode] + 'が終わりました！';
+  showToast(msg);
+  // タブを見ていない時だけデスクトップ通知も出す（見ている時はトーストで十分なため）
+  if(cfg.desktopNotify && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('pomodoro focus', { body: msg });
+  }
 }
 
 // ── 会議リマインダー ──
@@ -1513,14 +1669,114 @@ function dismissAlert() {
   setTimeout(() => { el.style.display='none'; card.style.animation=''; }, 200);
 }
 
-// ── タスクマップ ──
+// ── タスクマップ（カンバンボード：列 > サブリスト > カード の3階層） ──
 function generateId() {
   return 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+}
+
+// ノードの種類判定: depth0=常に列、depth2以上=常にカード、depth1のみtypeを見る
+// （旧データにtypeが無い場合は「子がいればサブリスト、いなければカード」と推測する）
+function getMapNodeType(node, depth) {
+  if (depth === 0) return 'column';
+  if (depth >= 2)  return 'card';
+  if (node.type === 'list' || node.type === 'card') return node.type;
+  return (node.children && node.children.length > 0) ? 'list' : 'card';
+}
+
+function getMapNodeDepth(nodes, id, depth = 0) {
+  for (const n of nodes) {
+    if (n.id === id) return depth;
+    if (n.children) {
+      const d = getMapNodeDepth(n.children, id, depth + 1);
+      if (d !== -1) return d;
+    }
+  }
+  return -1;
+}
+
+// 列・サブリストの色ラベル（明るめ・少し彩度を上げたパレット）
+const MAP_COLORS = [
+  { key: 'slate', hex: '#7B93B8' },
+  { key: 'sage',  hex: '#7FB088' },
+  { key: 'clay',  hex: '#E0996F' },
+  { key: 'dusk',  hex: '#8391D9' },
+  { key: 'sand',  hex: '#E0BC63' },
+  { key: 'plum',  hex: '#AC85C9' },
+  { key: 'pine',  hex: '#54BFB3' },
+  { key: 'rose',  hex: '#E28CA0' },
+];
+function mapColorHex(key) {
+  const c = MAP_COLORS.find(c => c.key === key);
+  return c ? c.hex : 'transparent';
+}
+function _hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function toggleMapColorPicker(id, ev) {
+  ev.stopPropagation();
+  const existing = document.getElementById('mapColorPicker');
+  if (existing) {
+    const wasForSameNode = existing.dataset.forId === id;
+    existing.remove();
+    if (wasForSameNode) return;
+  }
+  const btn = ev.currentTarget;
+  const pop = document.createElement('div');
+  pop.id = 'mapColorPicker';
+  pop.className = 'map-color-picker';
+  pop.dataset.forId = id;
+  pop.innerHTML =
+    `<span class="map-color-swatch map-color-swatch-none" onclick="setMapColor('${id}','')" title="色なし"></span>` +
+    MAP_COLORS.map(c => `<span class="map-color-swatch" style="background:${c.hex}" onclick="setMapColor('${id}','${c.key}')" title="${c.key}"></span>`).join('');
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.top  = (window.scrollY + r.bottom + 4) + 'px';
+  pop.style.left = (window.scrollX + r.left) + 'px';
+  setTimeout(() => document.addEventListener('click', closeMapColorPicker, { once: true }), 0);
+}
+function closeMapColorPicker() {
+  document.getElementById('mapColorPicker')?.remove();
+}
+function setMapColor(id, colorKey) {
+  const node = findMapNode(mapData, id);
+  if (!node) return;
+  if (colorKey) node.color = colorKey; else delete node.color;
+  closeMapColorPicker();
+  saveMap(); renderMap();
+}
+
+// 3階層より深い旧データを、depth2のカードが並ぶ形にフラット化する
+function _flattenMapDescendants(node) {
+  const kids = node.children || [];
+  node.children = [];
+  const out = [];
+  for (const c of kids) {
+    out.push(c);
+    out.push(..._flattenMapDescendants(c));
+  }
+  return out;
+}
+function normalizeMapTree(nodes, depth = 0) {
+  if (!Array.isArray(nodes)) return;
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    node.children = node.children || [];
+    if (depth >= 2) {
+      const extra = _flattenMapDescendants(node);
+      if (extra.length) nodes.splice(i + 1, 0, ...extra);
+    } else {
+      normalizeMapTree(node.children, depth + 1);
+    }
+  }
 }
 
 function loadMapData() {
   mapData      = JSON.parse(localStorage.getItem('pom_map')     || '[]');
   mapCollapsed = JSON.parse(localStorage.getItem('pom_map_col') || '{}');
+  normalizeMapTree(mapData);
+  localStorage.setItem('pom_map', JSON.stringify(mapData)); // 正規化結果を書き戻す
   // Notionから非同期で読み込み（新しいデータがあればlocalStorageを上書き）
   const token     = localStorage.getItem('pom_notion_token') || '';
   const mapPageId = localStorage.getItem('pom_map_page_id')  || '';
@@ -1534,7 +1790,8 @@ function loadMapData() {
     if (!data.ok || !data.mapData) return;
     try {
       mapData = JSON.parse(data.mapData);
-      localStorage.setItem('pom_map', data.mapData);
+      normalizeMapTree(mapData);
+      localStorage.setItem('pom_map', JSON.stringify(mapData));
       renderMap();
     } catch(e) {}
   };
@@ -1567,35 +1824,155 @@ function _pushMapToNotion() {
   document.body.appendChild(script);
 }
 
-// ── マップ Drag & Drop ──
+// ── マップ Drag & Drop（カード／サブリスト／列すべてに対応） ──
 let _mapDragOverEl = null;
 
 function onMapDragStart(e, id) {
-  if (e.target.matches('input, button')) { e.preventDefault(); return; }
+  if (e.target.closest('button, input')) { e.preventDefault(); return; }
   dragSrcMapId = id;
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => document.getElementById('map-node-' + id)?.classList.add('map-dragging'), 0);
 }
 
-// 上半分=before、下半分=after
-function _mapDropZone(el, clientY) {
-  const rect = el.getBoundingClientRect();
-  return (clientY - rect.top) < rect.height * 0.5 ? 'map-drop-before' : 'map-drop-after';
+// 移動前のツリーに対して、この移動が階層ルール的に許されるかを判定する
+// zone: 'before' | 'after'（兄弟として挿入） | 'into'（対象の子として入れる）
+function isValidMapMove(draggedId, targetId, zone) {
+  if (draggedId === targetId) return false;
+  const draggedNode = findMapNode(mapData, draggedId);
+  if (!draggedNode) return false;
+  if (isMapDescendant(draggedNode, targetId)) return false; // 自分の子孫には移動できない
+  const draggedDepth = getMapNodeDepth(mapData, draggedId);
+  if (draggedDepth === -1) return false;
+  const draggedKind = draggedDepth === 0 ? 'column' : getMapNodeType(draggedNode, draggedDepth);
+  const targetDepth = getMapNodeDepth(mapData, targetId);
+  if (targetDepth === -1) return false;
+  const resultDepth = zone === 'into' ? targetDepth + 1 : targetDepth;
+  if (draggedKind === 'column' && resultDepth !== 0) return false;
+  if (draggedKind === 'list'   && resultDepth !== 1) return false;
+  if (draggedKind === 'card'   && resultDepth !== 1 && resultDepth !== 2) return false;
+  if (zone === 'into') {
+    const targetNode = findMapNode(mapData, targetId);
+    if (!targetNode) return false;
+    const targetKind = targetDepth === 0 ? 'column' : getMapNodeType(targetNode, targetDepth);
+    // カード同士の「into」はOK: ドロップ先のカードをサブリストへ昇格させ、その子として入れる
+    // （3階層の上限があるため、ドロップ先が既にdepth2のカードだった場合はresultDepthの範囲チェックで弾かれる）
+    if (targetKind === 'card' && draggedKind !== 'card') return false;
+    if (targetKind === 'list' && draggedKind !== 'card') return false; // サブリストの中はカードのみ
+  }
+  return true;
 }
 
-function onMapDragOver(e, id) {
+// 縦方向（カード・サブリスト行）のドロップ位置を判定。allowIntoの場合は中央帯を「into」として扱う
+function _resolveMapZone(el, e, targetId, allowInto) {
+  const rect = el.getBoundingClientRect();
+  const frac = (e.clientY - rect.top) / rect.height;
+  if (allowInto && frac > 0.25 && frac < 0.75 && isValidMapMove(dragSrcMapId, targetId, 'into')) return 'into';
+  const zone = frac < 0.5 ? 'before' : 'after';
+  return isValidMapMove(dragSrcMapId, targetId, zone) ? zone : null;
+}
+
+function onMapDragOver(e, id, allowInto) {
   if (!dragSrcMapId || dragSrcMapId === id) return;
   e.preventDefault();
+  e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
-
   const el = e.currentTarget;
-  const zone = _mapDropZone(el, e.clientY);
+  const zone = _resolveMapZone(el, e, id, allowInto);
   if (_mapDragOverEl !== el) {
-    _mapDragOverEl?.classList.remove('map-drop-before', 'map-drop-after');
+    _mapDragOverEl?.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-into');
     _mapDragOverEl = el;
   }
-  el.classList.toggle('map-drop-before', zone === 'map-drop-before');
-  el.classList.toggle('map-drop-after',  zone === 'map-drop-after');
+  el.classList.toggle('map-drop-before', zone === 'before');
+  el.classList.toggle('map-drop-after',  zone === 'after');
+  el.classList.toggle('map-drop-into',   zone === 'into');
+}
+
+function onMapDrop(e, id, allowInto) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
+  const el = e.currentTarget;
+  const zone = _resolveMapZone(el, e, id, allowInto);
+  clearMapDragStyles();
+  const srcId = dragSrcMapId;
+  dragSrcMapId = null;
+  if (!zone) return;
+  const srcNode = removeFromMapTree(mapData, srcId);
+  if (!srcNode) return;
+  if (zone === 'into') {
+    // ドロップ先がまだ「カード」なら、ここでサブリストへ昇格させる
+    const targetDepth = getMapNodeDepth(mapData, id);
+    const targetNode  = findMapNode(mapData, id);
+    if (targetNode && targetDepth !== -1 && getMapNodeType(targetNode, targetDepth) === 'card') {
+      targetNode.type = 'list';
+    }
+    insertAsChildInMapTree(mapData, id, srcNode, 'end');
+    mapCollapsed[id] = false;
+  } else {
+    insertInMapTree(mapData, id, srcNode, zone);
+  }
+  saveMap(); renderMap();
+}
+
+// 列ヘッダー同士の横方向ドラッグ（列の並べ替え専用）
+function onMapColDragOver(e, id) {
+  if (!dragSrcMapId || dragSrcMapId === id) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  const el = e.currentTarget.closest('.map-column');
+  const rect = el.getBoundingClientRect();
+  const zone = (e.clientX - rect.left) / rect.width < 0.5 ? 'before' : 'after';
+  const valid = isValidMapMove(dragSrcMapId, id, zone);
+  if (_mapDragOverEl !== el) {
+    _mapDragOverEl?.classList.remove('map-col-drop-before', 'map-col-drop-after');
+    _mapDragOverEl = el;
+  }
+  el.classList.toggle('map-col-drop-before', valid && zone === 'before');
+  el.classList.toggle('map-col-drop-after',  valid && zone === 'after');
+}
+
+function onMapColDrop(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
+  const el = e.currentTarget.closest('.map-column');
+  const rect = el.getBoundingClientRect();
+  const zone = (e.clientX - rect.left) / rect.width < 0.5 ? 'before' : 'after';
+  clearMapDragStyles();
+  const valid = isValidMapMove(dragSrcMapId, id, zone);
+  const srcId = dragSrcMapId;
+  dragSrcMapId = null;
+  if (!valid) return;
+  const srcNode = removeFromMapTree(mapData, srcId);
+  if (!srcNode) return;
+  insertInMapTree(mapData, id, srcNode, zone);
+  saveMap(); renderMap();
+}
+
+// 列本体／サブリスト本体の空きスペースへのドロップ（末尾に追加、空コンテナへの受け皿）
+function onMapContainerDragOver(e, containerId) {
+  if (!dragSrcMapId) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.toggle('map-drop-into', isValidMapMove(dragSrcMapId, containerId, 'into'));
+}
+
+function onMapContainerDrop(e, containerId) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.remove('map-drop-into');
+  if (!dragSrcMapId) return;
+  const valid = isValidMapMove(dragSrcMapId, containerId, 'into');
+  const srcId = dragSrcMapId;
+  dragSrcMapId = null;
+  if (!valid) return;
+  const srcNode = removeFromMapTree(mapData, srcId);
+  if (!srcNode) return;
+  insertAsChildInMapTree(mapData, containerId, srcNode, 'end');
+  mapCollapsed[containerId] = false;
+  saveMap(); renderMap();
 }
 
 function onMapTreeDragOver(e) {
@@ -1610,31 +1987,17 @@ function onMapTreeDrop(e) {
   dragSrcMapId = null;
 }
 
-function onMapDrop(e, id) {
-  e.preventDefault();
-  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
-  clearMapDragStyles();
-
-  const zone = _mapDropZone(e.currentTarget, e.clientY);
-  const srcNode = removeFromMapTree(mapData, dragSrcMapId);
-  if (!srcNode) { dragSrcMapId = null; return; }
-
-  insertInMapTree(mapData, id, srcNode, zone === 'map-drop-before' ? 'before' : 'after');
-  dragSrcMapId = null;
-  saveMap(); renderMap();
-}
-
 function onMapDragEnd(e) {
   dragSrcMapId = null;
-  document.querySelectorAll('.map-node-row').forEach(el =>
-    el.classList.remove('map-drop-before', 'map-drop-after'));
-  document.querySelectorAll('.map-node.map-dragging').forEach(el => el.classList.remove('map-dragging'));
+  document.querySelectorAll('.map-drop-before, .map-drop-after, .map-drop-into, .map-col-drop-before, .map-col-drop-after')
+    .forEach(el => el.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-into', 'map-col-drop-before', 'map-col-drop-after'));
+  document.querySelectorAll('.map-dragging').forEach(el => el.classList.remove('map-dragging'));
   _mapDragOverEl = null;
 }
 
 function clearMapDragStyles() {
   if (_mapDragOverEl) {
-    _mapDragOverEl.classList.remove('map-drop-before', 'map-drop-after');
+    _mapDragOverEl.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-into', 'map-col-drop-before', 'map-col-drop-after');
     _mapDragOverEl = null;
   }
 }
@@ -1661,6 +2024,15 @@ function insertInMapTree(nodes, targetId, node, pos) {
   return false;
 }
 
+// targetIdの子として末尾（またはstart）に挿入する（「into」ドロップ用）
+function insertAsChildInMapTree(nodes, targetId, node, position) {
+  const target = findMapNode(nodes, targetId);
+  if (!target) return false;
+  target.children = target.children || [];
+  if (position === 'start') target.children.unshift(node); else target.children.push(node);
+  return true;
+}
+
 function isMapDescendant(node, targetId) {
   for (const child of (node.children || [])) {
     if (child.id === targetId || isMapDescendant(child, targetId)) return true;
@@ -1681,46 +2053,99 @@ function renderMap() {
   const el = document.getElementById('mapTree');
   if (!el) return;
   el.innerHTML = mapData.length
-    ? mapData.map(n => renderMapNode(n, 0)).join('')
-    : '<div class="empty">ノードがありません。上の入力欄から追加してください。</div>';
+    ? mapData.map(n => renderMapColumn(n)).join('')
+    : '<div class="empty">リストがありません。上の入力欄から追加してください。</div>';
 }
 
-function renderMapNode(node, depth) {
-  const hasChildren  = node.children && node.children.length > 0;
-  const collapsed    = mapCollapsed[node.id];
-  const urg          = node.urgency || 'normal';
-  const showChildren = !collapsed && (hasChildren || mapPendingParent === node.id);
-  const depthClass   = depth === 0 ? 'map-depth-0' : depth === 1 ? 'map-depth-1' : 'map-depth-deep';
+function renderMapColumn(node) {
+  const children = node.children || [];
+  const dotStyle = node.color ? `background:${mapColorHex(node.color)};border-color:transparent` : '';
+  const headerStyle = node.color ? `border-left:3px solid ${mapColorHex(node.color)};background:${_hexToRgba(mapColorHex(node.color),0.08)};border-radius:8px` : '';
   return `
-    <div class="map-node urgency-${urg}${node.id===selectedMapId?' selected':''} ${depthClass}" id="map-node-${node.id}">
-      <div class="map-node-row" draggable="true"
+    <div class="map-column${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}">
+      <div class="map-column-header" style="${headerStyle}" draggable="true"
         ondragstart="onMapDragStart(event,'${node.id}')"
-        ondragover="onMapDragOver(event,'${node.id}')"
-        ondrop="onMapDrop(event,'${node.id}')"
+        ondragover="onMapColDragOver(event,'${node.id}')"
+        ondrop="onMapColDrop(event,'${node.id}')"
         ondragend="onMapDragEnd(event)">
         <i class="ti ti-grip-vertical map-grip"></i>
-        <button class="icon-btn" onclick="toggleMapCollapse('${node.id}')" style="width:20px;height:20px;font-size:11px;flex-shrink:0">
-          ${hasChildren ? `<i class="ti ti-chevron-${collapsed?'right':'down'}"></i>` : '<span style="width:8px;display:inline-block"></span>'}
-        </button>
-        <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
-        <span class="map-node-name" style="flex:1;cursor:pointer" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
-        <button class="icon-btn" onclick="startAddMapChild('${node.id}')" title="子ノードを追加" style="font-size:13px"><i class="ti ti-plus"></i></button>
-        <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent);font-size:13px"><i class="ti ti-clock-play"></i></button>
-        <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除" style="font-size:13px"><i class="ti ti-x"></i></button>
+        <span class="map-color-dot" style="${dotStyle}" onclick="toggleMapColorPicker('${node.id}',event)" title="色を設定"></span>
+        <span class="map-node-name" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
+        <button class="icon-btn" onclick="startAddMapSublist('${node.id}')" title="サブリストを追加"><i class="ti ti-list"></i></button>
+        <button class="icon-btn" onclick="startAddMapCard('${node.id}')" title="カードを追加"><i class="ti ti-plus"></i></button>
+        <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="列を削除"><i class="ti ti-x"></i></button>
       </div>
-      ${showChildren ? `
-        <div class="map-node-children">
-          ${hasChildren ? node.children.map(c => renderMapNode(c, depth + 1)).join('') : ''}
-          ${mapPendingParent === node.id ? `
-            <div class="map-node-row" style="border-color:var(--accent);background:rgba(0,188,212,0.04)">
-              <span style="width:28px;flex-shrink:0"></span>
-              <input id="mapInlineInput" type="text" placeholder="ノード名を入力…"
-                style="flex:1;border:none;background:transparent;color:var(--text);font-size:14px;outline:none;font-family:'DM Sans',sans-serif"
-                onkeydown="if(event.key==='Enter')commitMapAdd();if(event.key==='Escape')cancelMapAdd()"/>
-              <button class="icon-btn" onclick="commitMapAdd()" style="color:var(--accent)"><i class="ti ti-check"></i></button>
-              <button class="icon-btn" onclick="cancelMapAdd()"><i class="ti ti-x"></i></button>
-            </div>` : ''}
-        </div>` : ''}
+      <div class="map-column-body"
+        ondragover="onMapContainerDragOver(event,'${node.id}')"
+        ondrop="onMapContainerDrop(event,'${node.id}')">
+        ${children.map(c => renderMapEntry(c, 1) + ((mapPendingParent === node.id && mapPendingAfterId === c.id) ? renderMapInlineAdd() : '')).join('')}
+        ${(mapPendingParent === node.id && !mapPendingAfterId) ? renderMapInlineAdd() : ''}
+        ${(!children.length && mapPendingParent !== node.id) ? '<div class="empty" style="padding:0.5rem 0;font-size:11px">カードなし</div>' : ''}
+      </div>
+    </div>`;
+}
+
+function renderMapEntry(node, depth) {
+  return getMapNodeType(node, depth) === 'list' ? renderMapSublist(node, depth) : renderMapCard(node, depth);
+}
+
+function renderMapSublist(node, depth) {
+  const collapsed = !!mapCollapsed[node.id];
+  const children = node.children || [];
+  const dotStyle = node.color ? `background:${mapColorHex(node.color)};border-color:transparent` : '';
+  const headerStyle = node.color ? `border-left:3px solid ${mapColorHex(node.color)};background:${_hexToRgba(mapColorHex(node.color),0.07)}` : '';
+  return `
+    <div class="map-sublist${collapsed?' collapsed':''}${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}">
+      <div class="map-sublist-header" style="${headerStyle}" draggable="true"
+        ondragstart="onMapDragStart(event,'${node.id}')"
+        ondragover="onMapDragOver(event,'${node.id}',true)"
+        ondrop="onMapDrop(event,'${node.id}',true)"
+        ondragend="onMapDragEnd(event)">
+        <button class="icon-btn" onclick="toggleMapCollapse('${node.id}')" style="width:20px;height:20px;font-size:11px;flex-shrink:0">
+          <i class="ti ti-chevron-${collapsed?'right':'down'}"></i>
+        </button>
+        <i class="ti ti-grip-vertical map-grip"></i>
+        <span class="map-color-dot" style="${dotStyle}" onclick="toggleMapColorPicker('${node.id}',event)" title="色を設定"></span>
+        <span class="map-node-name" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
+        <span class="map-sublist-count">${children.length}</span>
+        <button class="icon-btn" onclick="startAddMapCard('${node.id}')" title="カードを追加"><i class="ti ti-plus"></i></button>
+        <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="map-sublist-body"
+        ondragover="onMapContainerDragOver(event,'${node.id}')"
+        ondrop="onMapContainerDrop(event,'${node.id}')">
+        ${children.map(c => renderMapCard(c, depth + 1) + ((mapPendingParent === node.id && mapPendingAfterId === c.id) ? renderMapInlineAdd() : '')).join('')}
+        ${(mapPendingParent === node.id && !mapPendingAfterId) ? renderMapInlineAdd() : ''}
+      </div>
+    </div>`;
+}
+
+function renderMapCard(node, depth) {
+  const urg = node.urgency || 'normal';
+  // 列直下（depth1）のカードだけ、ドロップされるとサブリストに昇格できる（depth2のカードは既に最深なので不可）
+  const allowInto = depth === 1;
+  return `
+    <div class="map-card urgency-${urg}${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}"
+      draggable="true"
+      ondragstart="onMapDragStart(event,'${node.id}')"
+      ondragover="onMapDragOver(event,'${node.id}',${allowInto})"
+      ondrop="onMapDrop(event,'${node.id}',${allowInto})"
+      ondragend="onMapDragEnd(event)">
+      <i class="ti ti-grip-vertical map-grip"></i>
+      <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
+      <span class="map-node-name" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
+      <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent)"><i class="ti ti-clock-play"></i></button>
+      <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除"><i class="ti ti-x"></i></button>
+    </div>`;
+}
+
+function renderMapInlineAdd() {
+  return `
+    <div class="map-inline-add">
+      <input id="mapInlineInput" type="text" placeholder="${mapPendingType==='list' ? 'サブリスト名を入力…' : 'カード名を入力…'}"
+        onkeydown="if(event.key==='Enter')commitMapAdd();if(event.key==='Escape')cancelMapAdd()"/>
+      <button class="icon-btn" onclick="commitMapAdd()" style="color:var(--accent)"><i class="ti ti-check"></i></button>
+      <button class="icon-btn" onclick="cancelMapAdd()"><i class="ti ti-x"></i></button>
     </div>`;
 }
 
@@ -1735,9 +2160,39 @@ function addMapRoot() {
   saveMap(); renderMap();
 }
 
-function startAddMapChild(parentId) {
+function startAddMapSublist(columnId) {
+  mapPendingParent = columnId;
+  mapPendingType = 'list';
+  mapPendingAfterId = null;
+  renderMap();
+  setTimeout(() => document.getElementById('mapInlineInput')?.focus(), 30);
+}
+
+function startAddMapCard(parentId) {
   mapPendingParent = parentId;
-  mapCollapsed[parentId] = false;
+  mapPendingType = 'card';
+  mapPendingAfterId = null;
+  mapCollapsed[parentId] = false; // 折りたたまれたサブリストに追加する場合は開く
+  renderMap();
+  setTimeout(() => document.getElementById('mapInlineInput')?.focus(), 30);
+}
+
+// 選択中のノードと同じ種類のものを、その直後に兄弟として追加するモードに入る（Enterキー用）
+function startAddMapSibling(id) {
+  const depth = getMapNodeDepth(mapData, id);
+  if (depth === -1) return;
+  if (depth === 0) {
+    // 列（ルート）は上部の入力欄から追加する
+    document.getElementById('mapNewName')?.focus();
+    return;
+  }
+  const node = findMapNode(mapData, id);
+  const kind = getMapNodeType(node, depth);
+  const ctx  = findMapParentContext(id);
+  if (!ctx || !ctx.parentNode) return;
+  mapPendingParent  = ctx.parentNode.id;
+  mapPendingType    = kind;
+  mapPendingAfterId = id;
   renderMap();
   setTimeout(() => document.getElementById('mapInlineInput')?.focus(), 30);
 }
@@ -1749,19 +2204,28 @@ function commitMapAdd() {
   if (name) {
     const parent = findMapNode(mapData, mapPendingParent);
     if (parent) {
-      const newNode = { id: generateId(), name, urgency: 'normal', children: [] };
+      const newNode = { id: generateId(), name, urgency: 'normal', type: mapPendingType, children: [] };
       parent.children = parent.children || [];
-      parent.children.push(newNode);
+      if (mapPendingAfterId) {
+        const idx = parent.children.findIndex(c => c.id === mapPendingAfterId);
+        parent.children.splice(idx >= 0 ? idx + 1 : parent.children.length, 0, newNode);
+      } else {
+        parent.children.push(newNode);
+      }
       selectedMapId = newNode.id;
     }
     saveMap();
   }
   mapPendingParent = null;
+  mapPendingType = null;
+  mapPendingAfterId = null;
   renderMap();
 }
 
 function cancelMapAdd() {
   mapPendingParent = null;
+  mapPendingType = null;
+  mapPendingAfterId = null;
   renderMap();
 }
 
@@ -1834,13 +2298,21 @@ function _findInChildren(nodes, id, parentNode) {
   return null;
 }
 
-// ← : 1つ上の階層へ昇格（親の直後の兄弟になる）
+// ← : 1つ上の階層へ昇格（親の直後の兄弟になる）。3階層の制約に反する場合は何もしない
 function promoteMapNode(id) {
   const ctx = findMapParentContext(id);
   if (!ctx || !ctx.parentNode) return;
-  const [node] = ctx.siblings.splice(ctx.index, 1);
+  const node  = findMapNode(mapData, id);
+  const depth = getMapNodeDepth(mapData, id);
+  const kind  = depth === 0 ? 'column' : getMapNodeType(node, depth);
+  const resultDepth = depth - 1;
+  if (kind === 'column') return;
+  if (kind === 'list' && resultDepth !== 1) return;
+  if (kind === 'card' && resultDepth !== 1 && resultDepth !== 2) return;
+  const [n] = ctx.siblings.splice(ctx.index, 1);
   const parentCtx = findMapParentContext(ctx.parentNode.id);
-  if (parentCtx) parentCtx.siblings.splice(parentCtx.index + 1, 0, node);
+  if (parentCtx) parentCtx.siblings.splice(parentCtx.index + 1, 0, n);
+  else ctx.siblings.splice(ctx.index, 0, n);
   saveMap(); renderMap();
 }
 
@@ -1854,14 +2326,25 @@ function moveMapNode(id, dir) {
   saveMap(); renderMap();
 }
 
-// → : 1つ下の階層へ降格（直前の兄弟の最後の子になる）
+// → : 1つ下の階層へ降格（直前の兄弟の最後の子になる）。3階層の制約に反する場合は何もしない
 function demoteMapNode(id) {
   const ctx = findMapParentContext(id);
   if (!ctx || ctx.index === 0) return;
+  const node  = findMapNode(mapData, id);
+  const depth = getMapNodeDepth(mapData, id);
+  const kind  = depth === 0 ? 'column' : getMapNodeType(node, depth);
+  const resultDepth = depth + 1;
+  if (kind === 'column') return;
+  if (kind === 'list' && resultDepth !== 1) return;
+  if (kind === 'card' && resultDepth !== 1 && resultDepth !== 2) return;
   const prevSibling = ctx.siblings[ctx.index - 1];
-  const [node] = ctx.siblings.splice(ctx.index, 1);
+  const prevKind = depth === 0 ? 'column' : getMapNodeType(prevSibling, depth);
+  if (prevKind === 'card' && kind !== 'card') return;
+  if (prevKind === 'list' && kind !== 'card') return;
+  if (prevKind === 'card') prevSibling.type = 'list'; // 直前のカードをサブリストへ昇格
+  const [n] = ctx.siblings.splice(ctx.index, 1);
   prevSibling.children = prevSibling.children || [];
-  prevSibling.children.push(node);
+  prevSibling.children.push(n);
   mapCollapsed[prevSibling.id] = false;
   saveMap(); renderMap();
 }
@@ -1869,9 +2352,11 @@ function demoteMapNode(id) {
 document.addEventListener('keydown', e => {
   if (!selectedMapId) return;
   if (e.target.matches('input, textarea')) return;
+  const depth = getMapNodeDepth(mapData, selectedMapId);
+  if (depth === -1) return;
   if (e.key === 'Enter') {
     e.preventDefault();
-    startAddMapChild(selectedMapId);
+    startAddMapSibling(selectedMapId);
   }
   if (e.key === 'ArrowUp') {
     e.preventDefault();
