@@ -1695,15 +1695,16 @@ function getMapNodeDepth(nodes, id, depth = 0) {
 }
 
 // 列・サブリストの色ラベル（明るめ・少し彩度を上げたパレット）
+// 青緑（アプリのアクセントカラーと同系統）で、淡い〜濃いまで複数の濃さを用意
 const MAP_COLORS = [
-  { key: 'slate', hex: '#7B93B8' },
-  { key: 'sage',  hex: '#7FB088' },
-  { key: 'clay',  hex: '#E0996F' },
-  { key: 'dusk',  hex: '#8391D9' },
-  { key: 'sand',  hex: '#E0BC63' },
-  { key: 'plum',  hex: '#AC85C9' },
-  { key: 'pine',  hex: '#54BFB3' },
-  { key: 'rose',  hex: '#E28CA0' },
+  { key: 'mist',  hex: '#A9E4E1' },
+  { key: 'aqua',  hex: '#6ED3CE' },
+  { key: 'teal',  hex: '#33BDB8' },
+  { key: 'cyan',  hex: '#12A3A6' },
+  { key: 'deep',  hex: '#0E8689' },
+  { key: 'ocean', hex: '#0C6B6E' },
+  { key: 'pine',  hex: '#0A5153' },
+  { key: 'ink',   hex: '#083B3D' },
 ];
 function mapColorHex(key) {
   const c = MAP_COLORS.find(c => c.key === key);
@@ -1871,13 +1872,19 @@ function _resolveMapZone(el, e, targetId, allowInto) {
   return isValidMapMove(dragSrcMapId, targetId, zone) ? zone : null;
 }
 
+// このターゲットで処理できない（無効な）ドラッグは preventDefault/stopPropagation せず、
+// 親要素（列全体の並べ替えなど）にイベントを渡す。これにより「有効な場所を探して伝播していく」形になる。
 function onMapDragOver(e, id, allowInto) {
   if (!dragSrcMapId || dragSrcMapId === id) return;
+  const el = e.currentTarget;
+  const zone = _resolveMapZone(el, e, id, allowInto);
+  if (!zone) {
+    if (_mapDragOverEl === el) { el.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-into'); _mapDragOverEl = null; }
+    return;
+  }
   e.preventDefault();
   e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
-  const el = e.currentTarget;
-  const zone = _resolveMapZone(el, e, id, allowInto);
   if (_mapDragOverEl !== el) {
     _mapDragOverEl?.classList.remove('map-drop-before', 'map-drop-after', 'map-drop-into');
     _mapDragOverEl = el;
@@ -1888,15 +1895,15 @@ function onMapDragOver(e, id, allowInto) {
 }
 
 function onMapDrop(e, id, allowInto) {
-  e.preventDefault();
-  e.stopPropagation();
-  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
+  if (!dragSrcMapId || dragSrcMapId === id) { if (dragSrcMapId === id) dragSrcMapId = null; return; }
   const el = e.currentTarget;
   const zone = _resolveMapZone(el, e, id, allowInto);
+  if (!zone) return; // 無効 → 親要素（列の並べ替えなど）に委ねる
+  e.preventDefault();
+  e.stopPropagation();
   clearMapDragStyles();
   const srcId = dragSrcMapId;
   dragSrcMapId = null;
-  if (!zone) return;
   const srcNode = removeFromMapTree(mapData, srcId);
   if (!srcNode) return;
   if (zone === 'into') {
@@ -1914,36 +1921,47 @@ function onMapDrop(e, id, allowInto) {
   saveMap(); renderMap();
 }
 
-// 列ヘッダー同士の横方向ドラッグ（列の並べ替え専用）
+// 列全体（ヘッダー＋本体）が列の並べ替えドロップ対象。当たり判定を広くするため列カード全体で受ける。
+// x方向・y方向どちらのズレが大きいかで before/after を判定するので、横にも縦にも並ぶマソンリー配置でも掴みやすい。
+function _resolveMapColZone(el, e, targetId) {
+  const rect = el.getBoundingClientRect();
+  const xFrac = (e.clientX - rect.left) / rect.width;
+  const yFrac = (e.clientY - rect.top) / rect.height;
+  const zone = Math.abs(xFrac - 0.5) >= Math.abs(yFrac - 0.5)
+    ? (xFrac < 0.5 ? 'before' : 'after')
+    : (yFrac < 0.5 ? 'before' : 'after');
+  return isValidMapMove(dragSrcMapId, targetId, zone) ? zone : null;
+}
+
 function onMapColDragOver(e, id) {
   if (!dragSrcMapId || dragSrcMapId === id) return;
+  const el = e.currentTarget;
+  const zone = _resolveMapColZone(el, e, id);
+  if (!zone) {
+    if (_mapDragOverEl === el) { el.classList.remove('map-col-drop-before', 'map-col-drop-after'); _mapDragOverEl = null; }
+    return;
+  }
   e.preventDefault();
   e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
-  const el = e.currentTarget.closest('.map-column');
-  const rect = el.getBoundingClientRect();
-  const zone = (e.clientX - rect.left) / rect.width < 0.5 ? 'before' : 'after';
-  const valid = isValidMapMove(dragSrcMapId, id, zone);
   if (_mapDragOverEl !== el) {
     _mapDragOverEl?.classList.remove('map-col-drop-before', 'map-col-drop-after');
     _mapDragOverEl = el;
   }
-  el.classList.toggle('map-col-drop-before', valid && zone === 'before');
-  el.classList.toggle('map-col-drop-after',  valid && zone === 'after');
+  el.classList.toggle('map-col-drop-before', zone === 'before');
+  el.classList.toggle('map-col-drop-after',  zone === 'after');
 }
 
 function onMapColDrop(e, id) {
+  if (!dragSrcMapId || dragSrcMapId === id) { if (dragSrcMapId === id) dragSrcMapId = null; return; }
+  const el = e.currentTarget;
+  const zone = _resolveMapColZone(el, e, id);
+  if (!zone) return; // 無効 → さらに親（ボード全体のno-opキャッチオール）に委ねる
   e.preventDefault();
   e.stopPropagation();
-  if (!dragSrcMapId || dragSrcMapId === id) { dragSrcMapId = null; return; }
-  const el = e.currentTarget.closest('.map-column');
-  const rect = el.getBoundingClientRect();
-  const zone = (e.clientX - rect.left) / rect.width < 0.5 ? 'before' : 'after';
   clearMapDragStyles();
-  const valid = isValidMapMove(dragSrcMapId, id, zone);
   const srcId = dragSrcMapId;
   dragSrcMapId = null;
-  if (!valid) return;
   const srcNode = removeFromMapTree(mapData, srcId);
   if (!srcNode) return;
   insertInMapTree(mapData, id, srcNode, zone);
@@ -1953,21 +1971,25 @@ function onMapColDrop(e, id) {
 // 列本体／サブリスト本体の空きスペースへのドロップ（末尾に追加、空コンテナへの受け皿）
 function onMapContainerDragOver(e, containerId) {
   if (!dragSrcMapId) return;
+  if (!isValidMapMove(dragSrcMapId, containerId, 'into')) {
+    e.currentTarget.classList.remove('map-drop-into');
+    return; // 無効 → 親要素（列の並べ替えなど）に委ねる
+  }
   e.preventDefault();
   e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.toggle('map-drop-into', isValidMapMove(dragSrcMapId, containerId, 'into'));
+  e.currentTarget.classList.add('map-drop-into');
 }
 
 function onMapContainerDrop(e, containerId) {
-  e.preventDefault();
-  e.stopPropagation();
-  e.currentTarget.classList.remove('map-drop-into');
   if (!dragSrcMapId) return;
   const valid = isValidMapMove(dragSrcMapId, containerId, 'into');
+  e.currentTarget.classList.remove('map-drop-into');
+  if (!valid) return; // 無効 → 親要素（列の並べ替えなど）に委ねる
+  e.preventDefault();
+  e.stopPropagation();
   const srcId = dragSrcMapId;
   dragSrcMapId = null;
-  if (!valid) return;
   const srcNode = removeFromMapTree(mapData, srcId);
   if (!srcNode) return;
   insertAsChildInMapTree(mapData, containerId, srcNode, 'end');
@@ -2062,11 +2084,11 @@ function renderMapColumn(node) {
   const dotStyle = node.color ? `background:${mapColorHex(node.color)};border-color:transparent` : '';
   const headerStyle = node.color ? `border-left:3px solid ${mapColorHex(node.color)};background:${_hexToRgba(mapColorHex(node.color),0.08)};border-radius:8px` : '';
   return `
-    <div class="map-column${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}">
+    <div class="map-column${node.id===selectedMapId?' selected':''}" id="map-node-${node.id}"
+      ondragover="onMapColDragOver(event,'${node.id}')"
+      ondrop="onMapColDrop(event,'${node.id}')">
       <div class="map-column-header" style="${headerStyle}" draggable="true"
         ondragstart="onMapDragStart(event,'${node.id}')"
-        ondragover="onMapColDragOver(event,'${node.id}')"
-        ondrop="onMapColDrop(event,'${node.id}')"
         ondragend="onMapDragEnd(event)">
         <i class="ti ti-grip-vertical map-grip"></i>
         <span class="map-color-dot" style="${dotStyle}" onclick="toggleMapColorPicker('${node.id}',event)" title="色を設定"></span>
