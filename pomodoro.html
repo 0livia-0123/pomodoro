@@ -430,6 +430,21 @@ body {
   .map-sublist-header .map-node-name, .map-card .map-node-name { font-size: 13px; }
 }
 
+/* Task detail modal */
+.detail-link { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; }
+.detail-link:hover { background: var(--surface2); }
+.detail-link a { flex: 1; min-width: 0; color: var(--text); text-decoration: none; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-link a:hover { color: var(--accent); }
+.detail-link i.link-kind { color: var(--accent); font-size: 16px; flex-shrink: 0; }
+.detail-input {
+  height: 36px; padding: 0 10px; font-size: 13px; border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; min-width: 0;
+}
+.detail-input:focus { border-color: var(--accent); }
+.task-link-badge { font-size: 11px; color: var(--accent); font-family: 'DM Mono', monospace; display: inline-flex; align-items: center; gap: 2px; }
+.bar-link { color: var(--accent); font-size: 17px; display: flex; text-decoration: none; }
+.bar-link:hover { color: var(--accent-dark); }
+
 </style>
 </head>
 <body>
@@ -444,6 +459,26 @@ body {
       <button class="btn btn-sm" onclick="addCheckedTasks()"><i class="ti ti-plus"></i>タスクに追加</button>
       <button class="btn btn-sm" onclick="document.getElementById('importModal').style.display='none'">閉じる</button>
     </div>
+  </div>
+</div>
+<!-- Task detail modal -->
+<div id="taskDetailModal" onclick="if(event.target===this)closeTaskDetail()" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:1.75rem;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 24px 48px rgba(0,0,0,0.2);animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);position:relative">
+    <button class="icon-btn" onclick="closeTaskDetail()" title="閉じる" style="position:absolute;top:1rem;right:1rem"><i class="ti ti-x"></i></button>
+    <div class="card-title" style="margin-bottom:0.4rem">タスク詳細</div>
+    <div id="detailTaskName" style="font-size:18px;font-weight:500;margin-bottom:0.4rem;padding-right:2rem;word-break:break-all"></div>
+    <div id="detailSyncNote" style="display:none;font-size:11px;color:var(--accent);font-family:'DM Mono',monospace"><i class="ti ti-refresh"></i> タスクマップのカードと同期</div>
+    <div style="margin-bottom:1.25rem"></div>
+    <div class="card-title" style="margin-bottom:0.5rem">リンク</div>
+    <div id="detailLinks" style="margin-bottom:0.6rem"></div>
+    <div style="display:flex;gap:6px;margin-bottom:1.25rem">
+      <input type="text" id="detailLinkUrl" class="detail-input" style="flex:2" placeholder="URLを貼り付け" onkeydown="if(event.key==='Enter')addTaskLink()"/>
+      <input type="text" id="detailLinkTitle" class="detail-input" style="flex:1" placeholder="表示名（任意）" onkeydown="if(event.key==='Enter')addTaskLink()"/>
+      <button class="btn btn-sm" onclick="addTaskLink()"><i class="ti ti-plus"></i></button>
+    </div>
+    <div class="card-title" style="margin-bottom:0.5rem">メモ</div>
+    <textarea id="detailMemo" oninput="saveTaskMemo(this.value)" rows="5" placeholder="メモ（自動保存）"
+      style="width:100%;padding:10px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;outline:none;resize:vertical"></textarea>
   </div>
 </div>
 <input type="file" id="fileInput" accept=".json" onchange="loadJSON(event)" style="display:none"/>
@@ -620,6 +655,42 @@ body {
           <option value="soft">ソフト</option>
         </select>
       </div>
+      <div class="setting-row" style="border-top:1px solid var(--border2);padding-top:12px;margin-top:4px">
+        <span class="setting-label">作業中にYouTubeでBGMを流す</span>
+        <input type="checkbox" id="cfgBgmEnabled" onchange="updateBgmSettingVisibility()" style="width:18px;height:18px;accent-color:var(--accent)"/>
+      </div>
+      <div class="setting-row bgm-setting">
+        <span class="setting-label">作業中のBGM（動画または再生リストのURL）</span>
+        <input type="text" id="cfgBgmUrl" placeholder="https://www.youtube.com/watch?v=..."
+          style="flex:1;min-width:0;height:34px;padding:0 8px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;outline:none"/>
+      </div>
+      <div class="setting-row bgm-setting">
+        <span class="setting-label">BGMの音量</span>
+        <input type="range" id="cfgBgmVolume" min="0" max="100" step="5" value="40"
+          oninput="document.getElementById('cfgBgmVolumeLabel').textContent=this.value+'%';previewBgmVolume(this.value)"
+          style="flex:0 0 130px;accent-color:var(--accent)"/>
+        <span class="setting-unit" id="cfgBgmVolumeLabel" style="width:38px;text-align:right">40%</span>
+      </div>
+      <div class="setting-row bgm-setting">
+        <span class="setting-label">休憩中の音</span>
+        <select id="cfgBgmBreakMode" onchange="updateBgmSettingVisibility()" style="height:34px;padding:0 8px;font-size:14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;outline:none">
+          <option value="ambient">内蔵アンビエント（通信なし）</option>
+          <option value="youtube">YouTubeの別のBGM</option>
+          <option value="none">鳴らさない</option>
+        </select>
+      </div>
+      <div class="setting-row bgm-setting-breakurl">
+        <span class="setting-label">休憩中のBGM（URL）</span>
+        <input type="text" id="cfgBgmBreakUrl" placeholder="https://www.youtube.com/watch?v=..."
+          style="flex:1;min-width:0;height:34px;padding:0 8px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;outline:none"/>
+      </div>
+      <div class="setting-row bgm-setting" style="align-items:flex-start">
+        <span class="setting-label" style="font-size:12px;color:var(--text2);line-height:1.6">
+          作業開始で再生、休憩に入るとフェードアウトして休憩中の音に切り替わります。<br>
+          YouTubeの規約上プレイヤーは表示したままにする必要があるため、右下に小さく常駐します。<br>
+          ファイルを直接開いた場合（file://）は再生できません。公開URLから開いてください。
+        </span>
+      </div>
       <div class="setting-row">
         <span class="setting-label">1日の目標ポモドーロ数</span>
         <input type="number" id="cfgDailyGoal" min="0" max="30" value="8"/>
@@ -692,7 +763,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, deferred=[];
+let cfg, tasks, history, stats, activeIdx, currentMode, totalSec, remaining, running, interval, audioCtx, importBuf, sessionStartTime, endAt=null, deferred=[];
 let mapData=[], mapCollapsed={}, mapPendingParent=null, mapPendingType=null, mapPendingAfterId=null, selectedMapId=null, dragSrcMapId=null;
 
 // 日付が変わったかを判定し、変わっていれば完了タスクのクリア＆持ち越しタスクの復活を行う
@@ -724,12 +795,17 @@ function checkDayRollover() {
 }
 
 function load() {
-  cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'', volume:70, soundType:'chime', dailyGoal:8, desktopNotify:false };
+  cfg       = JSON.parse(localStorage.getItem('pom_cfg')    || 'null') || { work:25, short:5, long:15, autoBreak:true, longBreakInterval:4, lunchStart:'12:00', lunchEnd:'13:00', lunchEnabled:true, gasUrl:'', volume:70, soundType:'chime', dailyGoal:8, desktopNotify:false, bgmEnabled:false, bgmUrl:'', bgmVolume:40, bgmBreakMode:'ambient', bgmBreakUrl:'' };
   // 既存ユーザーのデータには無い項目があるので補完
   if(cfg.volume === undefined) cfg.volume = 70;
   if(cfg.soundType === undefined) cfg.soundType = 'chime';
   if(cfg.dailyGoal === undefined) cfg.dailyGoal = 8;
   if(cfg.desktopNotify === undefined) cfg.desktopNotify = false;
+  if(cfg.bgmEnabled === undefined) cfg.bgmEnabled = false;
+  if(cfg.bgmUrl === undefined) cfg.bgmUrl = '';
+  if(cfg.bgmVolume === undefined) cfg.bgmVolume = 40;
+  if(cfg.bgmBreakMode === undefined) cfg.bgmBreakMode = 'ambient';
+  if(cfg.bgmBreakUrl === undefined) cfg.bgmBreakUrl = '';
   tasks     = JSON.parse(localStorage.getItem('pom_tasks')  || '[]');
   history   = JSON.parse(localStorage.getItem('pom_hist')   || '[]');
   stats     = JSON.parse(localStorage.getItem('pom_stats')  || 'null') || { daily:{}, streak:0, lastDate:'' };
@@ -749,6 +825,13 @@ function load() {
   document.getElementById('cfgSoundType').value = cfg.soundType;
   document.getElementById('cfgDailyGoal').value = cfg.dailyGoal;
   document.getElementById('cfgDesktopNotify').checked = cfg.desktopNotify;
+  document.getElementById('cfgBgmEnabled').checked = !!cfg.bgmEnabled;
+  document.getElementById('cfgBgmUrl').value = cfg.bgmUrl || '';
+  document.getElementById('cfgBgmVolume').value = cfg.bgmVolume;
+  document.getElementById('cfgBgmVolumeLabel').textContent = cfg.bgmVolume + '%';
+  document.getElementById('cfgBgmBreakMode').value = cfg.bgmBreakMode || 'ambient';
+  document.getElementById('cfgBgmBreakUrl').value = cfg.bgmBreakUrl || '';
+  updateBgmSettingVisibility();
   const nt = localStorage.getItem('pom_notion_token')   || '';
   const nd = localStorage.getItem('pom_notion_db')      || '';
   const nm = localStorage.getItem('pom_map_page_id')    || '';
@@ -992,7 +1075,7 @@ function renderTimerTasks() {
   });
 
   displayOrder = order; // DnD用にdisplayOrderを更新
-  el.innerHTML = order.map((i, displayIdx)=>{ const t=tasks[i]; return `
+  el.innerHTML = order.map((i, displayIdx)=>{ const t=tasks[i], src=detailSource(t); return `
     <div class="task-item ${i===activeIdx?'is-active':''} ${t.completed?'is-done':''}"
       draggable="true"
       data-idx="${i}"
@@ -1006,8 +1089,9 @@ function renderTimerTasks() {
       <div class="task-check">${t.completed?'<i class="ti ti-check" style="font-size:11px;color:#fff"></i>':''}</div>
       <div style="flex:1;min-width:0" onclick="event.stopPropagation()">
         <div class="task-name" ondblclick="startEditTask(${i}, this)" title="ダブルクリックで編集">${esc(t.name)}</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${t.sub?`<span class="task-sub">${esc(t.sub)}</span>`:''} ${!t.completed && estimates[i] ? `<span class="task-eta">〜 ${estimates[i]}</span>` : ''}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${t.sub?`<span class="task-sub">${esc(t.sub)}</span>`:''} ${!t.completed && estimates[i] ? `<span class="task-eta">〜 ${estimates[i]}</span>` : ''}${src.links&&src.links.length?`<span class="task-link-badge"><i class="ti ti-link"></i>${src.links.length}</span>`:''}</div>
       </div>
+      <button class="icon-btn" onclick="event.stopPropagation();openTaskDetail(${i})" title="詳細（リンク・メモ）" style="color:${(src.links&&src.links.length)||src.memo?'var(--accent)':'var(--text3)'}"><i class="ti ti-notes" style="font-size:15px"></i></button>
       <span style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace">${t.done}/</span>
       <input class="pom-edit" type="number" min="1" max="99" value="${t.total}"
         onclick="event.stopPropagation()"
@@ -1101,6 +1185,7 @@ function setMode(m, force) {
   document.getElementById('startLabel').textContent = '開始';
   document.getElementById('playIcon').className = 'ti ti-player-play';
   render();
+  syncBgm();
 }
 document.querySelectorAll('.mode-pill').forEach(p => p.addEventListener('click', ()=>setMode(p.dataset.mode)));
 
@@ -1118,18 +1203,22 @@ function render() {
 
 function toggleTimer() {
   if(running) {
-    running=false; clearInterval(interval);
+    syncRemaining();
+    running=false; clearInterval(interval); endAt=null;
     document.getElementById('startLabel').textContent='再開';
     document.getElementById('playIcon').className='ti ti-player-play';
+    syncBgm();
   } else {
     // remainingが0のままなら現在モードでリセット
     if(remaining <= 0) { remaining = totalSec; sessionStartTime = null; render(); }
     if(!sessionStartTime) sessionStartTime = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
     clearInterval(interval); // 重複防止
     running=true;
+    endAt = Date.now() + remaining*1000; // 終了予定時刻を基準にする（スリープ・バックグラウンドでもずれない）
     document.getElementById('startLabel').textContent='一時停止';
     document.getElementById('playIcon').className='ti ti-player-pause';
     interval=setInterval(tick,1000);
+    syncBgm();
   }
 }
 function resetTimer() {
@@ -1137,11 +1226,17 @@ function resetTimer() {
   document.getElementById('startLabel').textContent='開始';
   document.getElementById('playIcon').className='ti ti-player-play';
   render();
+  syncBgm();
+}
+// 終了予定時刻から残り秒数を計算し直す
+function syncRemaining() {
+  if(endAt) remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
 }
 function tick() {
-  remaining = Math.max(0, remaining - 1);
+  const prevMin = Math.ceil(remaining / 60);
+  syncRemaining();
   render();
-  if(remaining % 60 === 0 && dragSrcDisplayIdx === null) renderTimerTasks(); // 1分ごとにETA更新（ドラッグ中は再描画しない）
+  if(Math.ceil(remaining / 60) !== prevMin && dragSrcDisplayIdx === null) renderTimerTasks(); // 1分ごとにETA更新（ドラッグ中は再描画しない）
   if(remaining<=0){ clearInterval(interval); running=false; onSessionEnd(); }
 }
 
@@ -1224,8 +1319,91 @@ function updateCurrentTaskBar() {
   const t=tasks[activeIdx];
   bar.innerHTML=`<i class="ti ti-focus" style="color:var(--accent);font-size:16px"></i>
     <span class="task-label">${esc(t.name)}</span>
+    ${(detailSource(t).links||[]).map(l=>`<a class="bar-link" href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.title||l.url)}"><i class="ti ${linkIcon(l.url)}"></i></a>`).join('')}
     <span class="task-pom" style="font-size:13px;color:var(--text3);font-family:'DM Mono',monospace">${t.done}/${t.total}</span>`;
 }
+// ── タスク詳細（リンク・メモ） ──
+// detailTask はリンク・メモの保存先。マップ由来のタスクはマップのカード自体を指す（データを1か所にして同期させる）
+let detailTask = null, detailIsMap = false;
+function detailSource(t) {
+  if(t && t.mapId) { const n = findMapNode(mapData, t.mapId); if(n) return n; }
+  return t;
+}
+function saveDetail() {
+  save();
+  if(detailIsMap) saveMap();
+}
+function linkIcon(url) {
+  if(/docs\.google\.com\/spreadsheets/.test(url)) return 'ti-table';
+  if(/docs\.google\.com\/presentation/.test(url)) return 'ti-presentation';
+  if(/docs\.google\.com\/document/.test(url))     return 'ti-file-text';
+  if(/drive\.google\.com/.test(url))              return 'ti-brand-google-drive';
+  if(/notion\.(so|site)/.test(url))               return 'ti-brand-notion';
+  return 'ti-link';
+}
+function openTaskDetail(i) {
+  const t = tasks[i];
+  if(!t) return;
+  detailTask = detailSource(t);
+  detailIsMap = detailTask !== t;
+  showDetailModal(t.name);
+}
+function openMapDetail(id) {
+  const node = findMapNode(mapData, id);
+  if(!node) return;
+  detailTask = node;
+  detailIsMap = true;
+  showDetailModal(node.name);
+}
+function showDetailModal(name) {
+  document.getElementById('detailTaskName').textContent = name;
+  document.getElementById('detailSyncNote').style.display = detailIsMap ? 'block' : 'none';
+  document.getElementById('detailMemo').value = detailTask.memo || '';
+  document.getElementById('detailLinkUrl').value = '';
+  document.getElementById('detailLinkTitle').value = '';
+  renderTaskDetailLinks();
+  document.getElementById('taskDetailModal').style.display = 'flex';
+  document.getElementById('detailLinkUrl').focus();
+}
+function closeTaskDetail() {
+  document.getElementById('taskDetailModal').style.display = 'none';
+  detailTask = null; detailIsMap = false;
+  renderTimerTasks(); updateCurrentTaskBar(); renderMap();
+}
+function renderTaskDetailLinks() {
+  const links = detailTask.links || [];
+  document.getElementById('detailLinks').innerHTML = links.length
+    ? links.map((l, j) => `<div class="detail-link">
+        <i class="ti ${linkIcon(l.url)} link-kind"></i>
+        <a href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.url)}">${esc(l.title || l.url)}</a>
+        <button class="icon-btn" onclick="removeTaskLink(${j})" title="削除"><i class="ti ti-trash" style="font-size:14px"></i></button>
+      </div>`).join('')
+    : '<div class="empty" style="padding:0.5rem 0">リンクはまだありません</div>';
+}
+function addTaskLink() {
+  const urlEl = document.getElementById('detailLinkUrl');
+  const titleEl = document.getElementById('detailLinkTitle');
+  const url = urlEl.value.trim();
+  if(!url) return;
+  if(!/^https?:\/\//i.test(url)) { showToast('http(s):// で始まるURLを入力してください'); return; }
+  if(!detailTask.links) detailTask.links = [];
+  detailTask.links.push({ title: titleEl.value.trim(), url });
+  urlEl.value = ''; titleEl.value = '';
+  saveDetail(); renderTaskDetailLinks(); urlEl.focus();
+}
+function removeTaskLink(j) {
+  detailTask.links.splice(j, 1);
+  saveDetail(); renderTaskDetailLinks();
+}
+function saveTaskMemo(v) {
+  if(!detailTask) return;
+  detailTask.memo = v;
+  saveDetail();
+}
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && detailTask) closeTaskDetail();
+});
+
 function deferTask(i) {
   const t = tasks[i];
   deferred.push({ ...t, done:0, completed:false }); // 進捗はリセット
@@ -1549,6 +1727,12 @@ function saveSettings() {
   cfg.volume        = parseInt(document.getElementById('cfgVolume').value)||0;
   cfg.soundType     = document.getElementById('cfgSoundType').value;
   cfg.dailyGoal     = Math.max(0, parseInt(document.getElementById('cfgDailyGoal').value)||0);
+  cfg.bgmEnabled    = document.getElementById('cfgBgmEnabled').checked;
+  cfg.bgmUrl        = document.getElementById('cfgBgmUrl').value.trim();
+  cfg.bgmVolume     = parseInt(document.getElementById('cfgBgmVolume').value)||0;
+  cfg.bgmBreakMode  = document.getElementById('cfgBgmBreakMode').value;
+  cfg.bgmBreakUrl   = document.getElementById('cfgBgmBreakUrl').value.trim();
+  applyBgmSettings();
   const wantsDesktopNotify = document.getElementById('cfgDesktopNotify').checked;
   cfg.desktopNotify = wantsDesktopNotify;
   save(); setMode(currentMode, true);
@@ -1598,6 +1782,254 @@ const SOUND_PRESETS = {
   bell:  { freqs:[880,660],          noteGap:0.35, attack:0.02, hold:0.9,  type:'triangle' },
   soft:  { freqs:[440],              noteGap:0,    attack:0.08, hold:0.5, type:'sine' },
 };
+
+// ============================================================
+// BGM（作業中はYouTube、休憩中は内蔵アンビエント）
+// ------------------------------------------------------------
+// 設定がOFFのあいだはYouTubeのスクリプトを読み込まないので通信も発生しない。
+// YouTubeの規約で音声のみ・プレイヤー非表示の再生は禁止されているため、
+// プレイヤーは小さくても画面に出したままにする。
+// file:// で開くとオリジンがnullになり埋め込みが動かない。
+// ============================================================
+
+const BGM_FADE_MS = 2000;
+
+let ytPlayer = null;          // YT.Player のインスタンス
+let ytApiState = 'none';      // none | loading | ready
+let bgmFadeTimer = null;
+let bgmCurrentSrc = '';       // いま読み込んでいるURL（切り替え判定用）
+let breakAmbient = null;      // 内蔵アンビエントのノード束
+
+/**
+ * YouTubeのURLから動画IDと再生リストIDを取り出す。
+ * watch?v= / youtu.be/ / playlist?list= / embed/ とID直書きに対応。
+ */
+function parseYouTubeUrl(url) {
+  const out = { videoId: '', listId: '' };
+  if (!url) return out;
+  const text = String(url).trim();
+  const list = text.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if (list) out.listId = list[1];
+  const v = text.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+  if (v) out.videoId = v[1];
+  if (!out.videoId) {
+    const short = text.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+    if (short) out.videoId = short[1];
+  }
+  if (!out.videoId) {
+    const embed = text.match(/\/embed\/([A-Za-z0-9_-]{11})/);
+    if (embed) out.videoId = embed[1];
+  }
+  if (!out.videoId && !out.listId && /^[A-Za-z0-9_-]{11}$/.test(text)) out.videoId = text;
+  return out;
+}
+
+/** そのモードで鳴らすべきURL。鳴らさないなら空文字 */
+function bgmUrlForMode(mode) {
+  if (mode === 'work') return cfg.bgmUrl || '';
+  if (cfg.bgmBreakMode === 'youtube') return cfg.bgmBreakUrl || '';
+  return '';
+}
+
+/** file:// では埋め込みが動かないので判定に使う */
+function bgmUnavailable() {
+  return location.protocol === 'file:';
+}
+
+function loadYouTubeApi() {
+  if (ytApiState !== 'none') return;
+  ytApiState = 'loading';
+  window.onYouTubeIframeAPIReady = () => { ytApiState = 'ready'; createYtPlayer(); };
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+
+function createYtPlayer() {
+  if (ytPlayer || ytApiState !== 'ready') return;
+  ytPlayer = new YT.Player('bgmPlayer', {
+    width: '212', height: '119',
+    playerVars: { autoplay: 0, controls: 1, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1 },
+    events: {
+      onReady: () => { try { ytPlayer.setVolume(0); } catch (e) {} syncBgm(); },
+      onStateChange: (e) => {
+        // 単独動画が終わったら頭から繰り返す（再生リストはYouTube側が進める）
+        if (e.data === YT.PlayerState.ENDED && !parseYouTubeUrl(bgmCurrentSrc).listId) {
+          try { ytPlayer.seekTo(0); ytPlayer.playVideo(); } catch (err) {}
+        }
+      },
+    },
+  });
+}
+
+function ytLoad(url) {
+  if (!ytPlayer || !ytPlayer.loadVideoById) return;
+  const parsed = parseYouTubeUrl(url);
+  bgmCurrentSrc = url;
+  try {
+    if (parsed.listId) ytPlayer.loadPlaylist({ list: parsed.listId, listType: 'playlist' });
+    else if (parsed.videoId) ytPlayer.loadVideoById(parsed.videoId);
+  } catch (e) {}
+}
+
+/** YouTubeの音量をなめらかに変える。0まで下げ切ったら一時停止する */
+function fadeYt(toPercent, done) {
+  if (!ytPlayer || !ytPlayer.getVolume) { if (done) done(); return; }
+  clearInterval(bgmFadeTimer);
+  let from = 0;
+  try { from = ytPlayer.getVolume(); } catch (e) {}
+  const steps = 20, wait = BGM_FADE_MS / steps;
+  let i = 0;
+  bgmFadeTimer = setInterval(() => {
+    i++;
+    const v = from + (toPercent - from) * (i / steps);
+    try { ytPlayer.setVolume(Math.max(0, Math.min(100, Math.round(v)))); } catch (e) {}
+    if (i >= steps) {
+      clearInterval(bgmFadeTimer);
+      if (toPercent <= 0) { try { ytPlayer.pauseVideo(); } catch (e) {} }
+      if (done) done();
+    }
+  }, wait);
+}
+
+// ------------------------------------------------------------
+// 休憩中の内蔵アンビエント（Web Audio で合成。音源ファイル不要）
+// ------------------------------------------------------------
+function startBreakAmbient() {
+  stopBreakAmbient(true);
+  const target = (cfg.bgmVolume === undefined ? 40 : cfg.bgmVolume) / 100 * 0.18;
+  if (target <= 0) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = audioCtx;
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    master.connect(ctx.destination);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    filter.connect(master);
+
+    // 柔らかい和音をゆっくり揺らして「休憩中」の空気を作る
+    const nodes = [];
+    [174.61, 261.63, 349.23, 440.00].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = i === 0 ? 'sine' : 'triangle';
+      o.frequency.value = f;
+      const base = i === 0 ? 0.16 : 0.06;
+      g.gain.value = base;
+      o.connect(g); g.connect(filter);
+      const lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.frequency.value = 0.05 + i * 0.017;
+      lg.gain.value = base * 0.5;
+      lfo.connect(lg); lg.connect(g.gain);
+      o.start(); lfo.start();
+      nodes.push(o, lfo);
+    });
+
+    master.gain.linearRampToValueAtTime(target, ctx.currentTime + BGM_FADE_MS / 1000);
+    breakAmbient = { master: master, nodes: nodes };
+  } catch (e) {}
+}
+
+function stopBreakAmbient(immediate) {
+  if (!breakAmbient) return;
+  const master = breakAmbient.master, nodes = breakAmbient.nodes;
+  breakAmbient = null;
+  try {
+    const t = audioCtx.currentTime;
+    const fade = immediate ? 0.05 : BGM_FADE_MS / 1000;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(0, t + fade);
+    nodes.forEach(n => { try { n.stop(t + fade + 0.1); } catch (e) {} });
+    setTimeout(() => { try { master.disconnect(); } catch (e) {} }, (fade + 0.3) * 1000);
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------
+// タイマーの状態に合わせて鳴らすものを決める
+// ------------------------------------------------------------
+function syncBgm() {
+  if (!cfg || !cfg.bgmEnabled) { stopBreakAmbient(true); return; }
+
+  const dock = document.getElementById('bgmDock');
+  const label = document.getElementById('bgmDockLabel');
+  const isWork = currentMode === 'work';
+  const wantYt = running && !!bgmUrlForMode(currentMode) && !bgmUnavailable();
+  const wantAmbient = running && !isWork && cfg.bgmBreakMode === 'ambient';
+
+  if (label) label.textContent = isWork ? 'BGM（作業中）' : 'BGM（休憩中）';
+
+  // 内蔵アンビエント
+  if (wantAmbient && !breakAmbient) startBreakAmbient();
+  if (!wantAmbient && breakAmbient) stopBreakAmbient();
+
+  // YouTube
+  if (!wantYt) { fadeYt(0); return; }
+  if (ytApiState !== 'ready') { loadYouTubeApi(); return; }
+  if (!ytPlayer) { createYtPlayer(); return; }
+  if (dock) dock.style.display = 'block';
+
+  const url = bgmUrlForMode(currentMode);
+  if (url !== bgmCurrentSrc) {
+    ytLoad(url);
+    try { ytPlayer.setVolume(0); } catch (e) {}
+  }
+  try { ytPlayer.playVideo(); } catch (e) {}
+  fadeYt(cfg.bgmVolume === undefined ? 40 : cfg.bgmVolume);
+}
+
+/** 設定を変えたときに呼ぶ。ONなら枠を出し、OFFなら止めて消す */
+function applyBgmSettings() {
+  const dock = document.getElementById('bgmDock');
+  if (!cfg.bgmEnabled || bgmUnavailable()) {
+    fadeYt(0);
+    stopBreakAmbient(true);
+    if (dock) dock.style.display = 'none';
+    return;
+  }
+  if (dock) dock.style.display = 'block';
+  if (ytApiState === 'none') loadYouTubeApi();
+  syncBgm();
+}
+
+function disableBgmFromDock() {
+  cfg.bgmEnabled = false;
+  const box = document.getElementById('cfgBgmEnabled');
+  if (box) box.checked = false;
+  save();
+  applyBgmSettings();
+  updateBgmSettingVisibility();
+}
+
+/** 設定画面で関係ない項目を隠す */
+function updateBgmSettingVisibility() {
+  const on = document.getElementById('cfgBgmEnabled');
+  const mode = document.getElementById('cfgBgmBreakMode');
+  if (!on || !mode) return;
+  const show = on.checked;
+  document.querySelectorAll('.bgm-setting').forEach(el => {
+    el.style.display = show ? '' : 'none';
+  });
+  document.querySelectorAll('.bgm-setting-breakurl').forEach(el => {
+    el.style.display = (show && mode.value === 'youtube') ? '' : 'none';
+  });
+}
+
+/** 音量スライダーを動かしたときに即座に反映する */
+function previewBgmVolume(value) {
+  const v = parseInt(value) || 0;
+  if (ytPlayer && ytPlayer.setVolume && currentMode === 'work') {
+    try { ytPlayer.setVolume(v); } catch (e) {}
+  }
+  if (breakAmbient) {
+    try {
+      breakAmbient.master.gain.setTargetAtTime(v / 100 * 0.18, audioCtx.currentTime, 0.1);
+    } catch (e) {}
+  }
+}
 
 function beep(volOverride, typeOverride) {
   try {
@@ -1794,6 +2226,7 @@ function loadMapData() {
       normalizeMapTree(mapData);
       localStorage.setItem('pom_map', JSON.stringify(mapData));
       renderMap();
+      renderTimerTasks(); updateCurrentTaskBar(); // マップ由来タスクのリンク表示を更新
     } catch(e) {}
   };
   script.onerror = () => { delete window[cb]; document.body.removeChild(script); };
@@ -2156,6 +2589,8 @@ function renderMapCard(node, depth) {
       <i class="ti ti-grip-vertical map-grip"></i>
       <span class="urgency-dot" onclick="cycleMapUrgency('${node.id}')" title="クリックで緊急度を変更"></span>
       <span class="map-node-name" onclick="selectMapNode('${node.id}')" ondblclick="editMapName('${node.id}',this)">${esc(node.name)}</span>
+      ${node.links && node.links.length ? `<span class="task-link-badge"><i class="ti ti-link"></i>${node.links.length}</span>` : ''}
+      <button class="icon-btn" onclick="openMapDetail('${node.id}')" title="詳細（リンク・メモ）" style="color:${(node.links && node.links.length) || node.memo ? 'var(--accent)' : 'var(--text3)'}"><i class="ti ti-notes"></i></button>
       <button class="icon-btn" onclick="addToTodayFromMap('${node.id}')" title="今日のタスクに追加" style="color:var(--accent)"><i class="ti ti-clock-play"></i></button>
       <button class="icon-btn" onclick="deleteMapNode('${node.id}')" title="削除"><i class="ti ti-x"></i></button>
     </div>`;
@@ -2402,7 +2837,7 @@ document.addEventListener('keydown', e => {
 function addToTodayFromMap(id) {
   const node = findMapNode(mapData, id);
   if (!node) return;
-  tasks.push({ name: node.name, total: 1, done: 0, completed: false, sub: '' });
+  tasks.push({ name: node.name, total: 1, done: 0, completed: false, sub: '', mapId: node.id });
   if (activeIdx < 0) activeIdx = tasks.length - 1;
   save(); renderTasks(); renderTimerTasks();
   showToast('「' + node.name + '」をタスクに追加しました');
@@ -2415,8 +2850,22 @@ updateTimerStats();
 // 開きっぱなしのタブでも日付が変わったら自動でリフレッシュする
 setInterval(checkDayRollover, 60000);
 document.addEventListener('visibilitychange', () => {
-  if(!document.hidden) checkDayRollover();
+  if(!document.hidden) {
+    checkDayRollover();
+    if(running) tick(); // 復帰時に即座に表示を追いつかせる
+  }
 });
 </script>
+<!-- BGMプレイヤー（設定がONのときだけ生成する） -->
+<div id="bgmDock" style="display:none;position:fixed;right:16px;bottom:16px;z-index:900;
+  background:var(--bg2,#fff);border:1px solid var(--border2);border-radius:12px;
+  box-shadow:0 6px 24px rgba(0,0,0,.16);overflow:hidden;width:212px">
+  <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:12px;color:var(--text2)">
+    <i class="ti ti-music"></i>
+    <span id="bgmDockLabel" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">BGM</span>
+    <button class="icon-btn" onclick="disableBgmFromDock()" title="BGMをオフにする"><i class="ti ti-x"></i></button>
+  </div>
+  <div id="bgmPlayer" style="width:212px;height:119px;background:#000"></div>
+</div>
 </body>
 </html>
